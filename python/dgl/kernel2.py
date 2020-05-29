@@ -46,6 +46,16 @@ def copy_e_sum(gidx, Y, Z):
     """
     _CAPI_DGLKernelCopyESum(gidx, Y, Z)
 
+def row_to_nonzero(gidx, X, Z):
+    """
+    Parameters
+    ----------
+    gidx : HeteroGraphIndex (must have only one relation)
+    Y : (E, D)
+    Z : out tensor
+    """
+    _CAPI_DGLKernelRowToNonZero(gidx, X, Z)
+
 def u_op_e_max(op, gidx, X, Y, Z, argX, argY):
     """
     Parameters

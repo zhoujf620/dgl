@@ -1,4 +1,6 @@
 import torch as th
+from .tensor import zerocopy_to_dgl_ndarray as to_dgl_nd
+from .tensor import zerocopy_from_dgl_ndarray as from_dgl_nd
 from ... import kernel2 as K
 
 class UMulESum(th.autograd.Function):
@@ -6,7 +8,10 @@ class UMulESum(th.autograd.Function):
     def forward(ctx, g, X, Y):
         bshape = K.infer_broadcast_shape(X.shape[1:], Y.shape[1:])
         Z = th.zeros((g.number_of_nodes(1),) + bshape, device=X.device, dtype=X.dtype)
-        K.u_op_e_sum('mul', g, X, Y, Z)
+        K.u_op_e_sum('mul', g,
+                     to_dgl_nd(X),
+                     to_dgl_nd(Y),
+                     to_dgl_nd(Z))
         ctx.backward_cache = g
         ctx.save_for_backward(X, Y)
         return Z
@@ -29,7 +34,10 @@ class UAddESum(th.autograd.Function):
     def forward(ctx, g, X, Y):
         bshape = K.infer_broadcast_shape(X.shape[1:], Y.shape[1:])
         Z = th.zeros((g.number_of_nodes(1),) + bshape, device=X.device, dtype=X.dtype)
-        K.u_op_e_sum('add', g, X, Y, Z)
+        K.u_op_e_sum('add', g,
+                     to_dgl_nd(X),
+                     to_dgl_nd(Y),
+                     to_dgl_nd(Z))
         ctx.backward_cache = g
         ctx.save_for_backward(X, Y)
         return Z
@@ -54,7 +62,12 @@ class UMulEMax(th.autograd.Function):
         Z = th.zeros((g.number_of_nodes(1),) + bshape, device=X.device, dtype=X.dtype)
         argX = th.zeros((Z.size(0),), device=X.device, dtype=getattr(th, g.dtype))
         argY = th.zeros((Z.size(0),), device=X.device, dtype=getattr(th, g.dtype))
-        K.u_op_e_max('mul', g, X, Y, Z, argX, argY)
+        K.u_op_e_max('mul', g,
+                     to_dgl_nd(X),
+                     to_dgl_nd(Y),
+                     to_dgl_nd(Z),
+                     to_dgl_nd(argX),
+                     to_dgl_nd(argY))
         ctx.backward_cache = g
         ctx.save_for_backward(X, Y, argX, argY)
         return Z
@@ -80,7 +93,12 @@ class UMulEMin(th.autograd.Function):
         Z = th.zeros((g.number_of_nodes(1),) + bshape, device=X.device, dtype=X.dtype)
         argX = th.zeros((Z.size(0),), device=X.device, dtype=getattr(th, g.dtype))
         argY = th.zeros((Z.size(0),), device=X.device, dtype=getattr(th, g.dtype))
-        K.u_op_e_min('mul', g, X, Y, Z, argX, argY)
+        K.u_op_e_min('mul', g,
+                     to_dgl_nd(X),
+                     to_dgl_nd(Y),
+                     to_dgl_nd(Z),
+                     to_dgl_nd(argX),
+                     to_dgl_nd(argY))
         ctx.backward_cache = g
         ctx.save_for_backward(X, Y, argX, argY)
         return Z
@@ -96,7 +114,12 @@ class UAddEMax(th.autograd.Function):
         Z = th.zeros((g.number_of_nodes(1),) + bshape, device=X.device, dtype=X.dtype)
         argX = th.zeros((Z.size(0),), device=X.device, dtype=getattr(th, g.dtype))
         argY = th.zeros((Z.size(0),), device=X.device, dtype=getattr(th, g.dtype))
-        K.u_op_e_max('add', g, X, Y, Z, argX, argY)
+        K.u_op_e_max('add', g,
+                     to_dgl_nd(X),
+                     to_dgl_nd(Y),
+                     to_dgl_nd(Z),
+                     to_dgl_nd(argX),
+                     to_dgl_nd(argY))
         ctx.backward_cache = g
         ctx.save_for_backward(X, Y, argX, argY)
         return Z
@@ -122,7 +145,12 @@ class UAddEMin(th.autograd.Function):
         Z = th.zeros((g.number_of_nodes(1),) + bshape, device=X.device, dtype=X.dtype)
         argX = th.zeros((Z.size(0),), device=X.device, dtype=getattr(th, g.dtype))
         argY = th.zeros((Z.size(0),), device=X.device, dtype=getattr(th, g.dtype))
-        K.u_op_e_min('add', g, X, Y, Z, argX, argY)
+        K.u_op_e_min('add', g,
+                     to_dgl_nd(X),
+                     to_dgl_nd(Y),
+                     to_dgl_nd(Z),
+                     to_dgl_nd(argX),
+                     to_dgl_nd(argY))
         ctx.backward_cache = g
         ctx.save_for_backward(X, Y, argX, argY)
         return Z
@@ -135,7 +163,7 @@ class RowToNonZero(th.autograd.Function):
     @staticmethod
     def forward(ctx, g, X):
         Z = th.zeros((g.number_of_edges(0), ) + X.shape[1:], device=X.device, dtype=X.dtype)
-        K.row_to_nonzero(g, X, Z)
+        K.row_to_nonzero(g, to_dgl_nd(X), to_dgl_nd(Z))
         ctx.backward_cache = g
         return Z
 
@@ -151,7 +179,7 @@ class CopyESum(th.autograd.Function):
     @staticmethod
     def forward(ctx, g, Y):
         Z = th.zeros((g.number_of_nodes(1), ) + Y.shape[1:], device=Y.device, dtype=Y.dtype)
-        K.copy_e_sum(g, Y, Z)
+        K.copy_e_sum(g, to_dgl_nd(Y), to_dgl_nd(Z))
         ctx.backward_cache = g
         return Z
 
@@ -168,7 +196,7 @@ class CopyUSum(th.autograd.Function):
     @staticmethod
     def forward(ctx, g, X):
         Z = th.zeros((g.number_of_nodes(1), ) + X.shape[1:], device=X.device, dtype=X.dtype)
-        K.copy_u_sum(g, X, Z)
+        K.copy_u_sum(g, to_dgl_nd(X), to_dgl_nd(Z))
         ctx.backward_cache = g
         return Z
 
@@ -185,7 +213,7 @@ class UMulV(th.autograd.Function):
     def forward(ctx, g, X, Y):
         bshape = K.infer_broadcast_shape(X.shape[1:], Y.shape[1:])
         Z = th.zeros((g.number_of_edges(0),) + bshape, device=X.device, dtype=X.dtype)
-        K.u_op_v('mul', g, X, Y, Z)
+        K.u_op_v('mul', g, to_dgl_nd(X), to_dgl_nd(Y), to_dgl_nd(Z))
         ctx.backward_cache = g
         ctx.save_for_backward(X, Y)
         return Z
@@ -208,7 +236,7 @@ class UAddV(th.autograd.Function):
     def forward(ctx, g, X, Y):
         bshape = K.infer_broadcast_shape(X.shape[1:], Y.shape[1:])
         Z = th.zeros((g.number_of_edges(0),) + bshape, device=X.device, dtype=X.dtype)
-        K.u_op_v('add', g, X, Y, Z)
+        K.u_op_v('add', g, to_dgl_nd(X), to_dgl_nd(Y), to_dgl_nd(Z))
         ctx.backward_cache = g
         ctx.save_for_backward(X, Y)
         return Z
@@ -231,7 +259,7 @@ class UDotV(th.autograd.Function):
     def forward(ctx, g, X, Y):
         bshape = K.infer_broadcast_shape(X.shape[1:-1], Y.shape[1:-1])
         Z = th.zeros((g.number_of_edges(0),) + bshape + (1,), device=X.device, dtype=X.dtype)
-        K.u_op_v('dot', g, X, Y, Z)
+        K.u_op_v('dot', g, to_dgl_nd(X), to_dgl_nd(Y), to_dgl_nd(Z))
         ctx.backward_cache = g
         ctx.save_for_backward(X, Y)
         return Z
