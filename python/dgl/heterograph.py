@@ -17,6 +17,9 @@ from .view import HeteroNodeView, HeteroNodeDataView, HeteroEdgeView, HeteroEdge
 from .base import ALL, SLICE_FULL, NTYPE, NID, ETYPE, EID, is_all, DGLError, dgl_warning
 from .udf import NodeBatch, EdgeBatch
 
+from .function.message import MessageFunction, BinaryMessageFunction, CopyMessageFunction
+from .function.reducer import ReduceFunction
+
 __all__ = ['DGLHeteroGraph', 'combine_names']
 
 class DGLHeteroGraph(object):
@@ -3634,6 +3637,29 @@ class DGLHeteroGraph(object):
                                           message_func, reduce_func,
                                           apply_node_func)
             Runtime.run(prog)
+
+
+    def update_all2(self, mfunc, rfunc, etype=None):
+        # only one type of edges
+        etid = self.get_etype_id(etype)
+        stid, dtid = self._graph.metagraph.find_edge(etid)
+        # TODO: ctx
+        srcframe = self._node_frames[stid]
+        dstframe = self._node_frames[dtid]
+        eframe = self._edge_frames[etid]
+        assert isinstance(mfunc, MessageFunction)
+        assert isinstance(rfunc, ReduceFunction)
+        assert rfunc.msg_field == mfunc.out_field
+        op = getattr(F, '%s_%s' % (str(mfunc), str(rfunc)))
+        if isinstance(mfunc, BinaryMessageFunction):
+            X, Y = mfunc.fetch_inputs(srcframe, dstframe, eframe)
+            gidx = self._graph.get_unitgraph(etid, utils.to_dgl_context(F.context(X)))
+            Z = op(gidx, X, Y)
+        else:
+            X = mfunc.fetch_inputs(srcframe, dstframe, eframe)
+            gidx = self._graph.get_unitgraph(etid, utils.to_dgl_context(F.context(X)))
+            Z = op(gidx, X)
+        dstframe[rfunc.out_field] = Z
 
     def multi_update_all(self, etype_dict, cross_reducer, apply_node_func=None):
         r"""Send and receive messages along all edges.

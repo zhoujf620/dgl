@@ -1,4 +1,17 @@
-def u_op_e_sum_coo(gidx, X, Y, op):
+def infer_broadcast_shape(shp1, shp2):
+    """
+    Parameters
+    ----------
+    shp1 : tuple[int]
+    shp2 : tuple[int]
+
+    Returns
+    -------
+    shape after broadcasting
+    """
+    pass
+
+def u_op_e_sum(op, gidx, X, Y, Z):
     """
     Parameters
     ----------
@@ -6,40 +19,31 @@ def u_op_e_sum_coo(gidx, X, Y, op):
     X : (N1, D)
     Y : (E, D)
     op : 'mul' or 'add'
-
-    Returns
-    -------
-    Z : (N2, D)
+    Z : out tensor
     """
     pass
 
-def copy_u_sum(gidx, X):
+def copy_u_sum(gidx, X, Z):
     """
     Parameters
     ----------
     gidx : HeteroGraphIndex (must have only one relation)
     X : (N1, D)
-
-    Returns
-    -------
-    Z : (N2, D)
+    Z : out tensor
     """
     pass
 
-def reduce_on_row_coo(gidx, Y):
+def copy_e_sum(gidx, Y, Z):
     """
     Parameters
     ----------
     gidx : HeteroGraphIndex (must have only one relation)
     Y : (E, D)
-
-    Returns
-    -------
-    Z : (N2, D)
+    Z : out tensor
     """
     pass
 
-def u_op_e_max(gidx, X, Y, op):
+def u_op_e_max(op, gidx, X, Y, Z, argX, argY):
     """
     Parameters
     ----------
@@ -48,15 +52,15 @@ def u_op_e_max(gidx, X, Y, op):
     Y : (E, D)
     op : 'mul', 'add'
 
-    Returns
+    output
     -------
     Z : (N2, D)
-    arg_X : (N2, 1)
-    arg_Y : (N2, 1)
+    arg_X : (N2,)
+    arg_Y : (N2,)
     """
     pass
 
-def u_op_e_min(gidx, X, Y, op):
+def u_op_e_min(op, gidx, X, Y, Z, argX, argY):
     """
     Parameters
     ----------
@@ -65,15 +69,15 @@ def u_op_e_min(gidx, X, Y, op):
     Y : (E, D)
     op : 'mul', 'add'
 
-    Returns
+    output
     -------
     Z : (N2, D)
-    arg_X : (N2, 1)
-    arg_Y : (N2, 1)
+    arg_X : (N2,)
+    arg_Y : (N2,)
     """
     pass
 
-def u_op_v(gidx, X, Y, op):
+def u_op_v(op, gidx, X, Y, Z):
     """
     Parameters
     ----------
@@ -82,8 +86,8 @@ def u_op_v(gidx, X, Y, op):
     Y : (N2, D)
     op : 'mul', 'add', 'dot'
 
-    Returns
+    output
     -------
-    Z : (E, D)
+    Z : (E, D) or (E, 1) if op == 'dot'
     """
     pass

@@ -66,6 +66,22 @@ class BinaryMessageFunction(MessageFunction):
         rhs = TargetCode.CODE2STR[self.rhs]
         return "{}_{}_{}".format(lhs, self.binary_op, rhs)
 
+    def fetch_inputs(self, srcframe, dstframe, eframe):
+        if self.lhs == TargetCode.SRC:
+            lhs = srcframe[self.lhs_field]
+        elif self.lhs == TargetCode.DST:
+            lhs = dstframe[self.lhs_field]
+        else:
+            lhs = eframe[self.lhs_field]
+
+        if self.rhs == TargetCode.SRC:
+            rhs = srcframe[self.rhs_field]
+        elif self.rhs == TargetCode.DST:
+            rhs = dstframe[self.rhs_field]
+        else:
+            rhs = eframe[self.rhs_field]
+
+        return lhs, rhs
 
 class CopyMessageFunction(MessageFunction):
     """Class for the copy builtin message function.
@@ -92,6 +108,14 @@ class CopyMessageFunction(MessageFunction):
         out_map = var.MAP(out_map)
         return ir.COPY_REDUCE(reducer, graph, self.target, in_data, out_size,
                               in_map, out_map)
+
+    def fetch_inputs(self, srcframe, dstframe, eframe):
+        if self.target == TargetCode.SRC:
+            return srcframe[self.in_field]
+        elif self.target == TargetCode.DST:
+            return = dstframe[self.in_field]
+        else:
+            return = eframe[self.in_field]
 
     @property
     def name(self):
