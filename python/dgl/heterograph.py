@@ -3650,7 +3650,7 @@ class DGLHeteroGraph(object):
         assert isinstance(mfunc, MessageFunction)
         assert isinstance(rfunc, ReduceFunction)
         assert rfunc.msg_field == mfunc.out_field
-        op = getattr(F, '%s_%s' % (str(mfunc), str(rfunc)))
+        op = getattr(F, '%s_%s' % (mfunc.name, rfunc.name))
         if isinstance(mfunc, BinaryMessageFunction):
             X, Y = mfunc.fetch_inputs(srcframe, dstframe, eframe)
             gidx = self._graph.get_unitgraph(etid, utils.to_dgl_context(F.context(X)))

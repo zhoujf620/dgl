@@ -113,9 +113,9 @@ class CopyMessageFunction(MessageFunction):
         if self.target == TargetCode.SRC:
             return srcframe[self.in_field]
         elif self.target == TargetCode.DST:
-            return = dstframe[self.in_field]
+            return dstframe[self.in_field]
         else:
-            return = eframe[self.in_field]
+            return eframe[self.in_field]
 
     @property
     def name(self):

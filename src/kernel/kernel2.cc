@@ -31,7 +31,7 @@ inline void CheckCtx(
 }  // namespace
 
 
-DGL_REGISTER_GLOBAL("kernel._CAPI_DGLKernelUOpESum")
+DGL_REGISTER_GLOBAL("kernel2._CAPI_DGLKernelUOpESum")
 .set_body([] (DGLArgs args, DGLRetValue* rv) {
     const std::string op = args[0];
     HeteroGraphRef graph = args[1];
@@ -41,7 +41,7 @@ DGL_REGISTER_GLOBAL("kernel._CAPI_DGLKernelUOpESum")
     CheckCtx(graph->Context(), {X, Y, Z}, {"U_data", "E_data", "Out"});
   });
 
-DGL_REGISTER_GLOBAL("kernel._CAPI_DGLKernelCopyUSum")
+DGL_REGISTER_GLOBAL("kernel2._CAPI_DGLKernelCopyUSum")
 .set_body([] (DGLArgs args, DGLRetValue* rv) {
     HeteroGraphRef graph = args[0];
     NDArray X = args[1];
@@ -49,7 +49,7 @@ DGL_REGISTER_GLOBAL("kernel._CAPI_DGLKernelCopyUSum")
     CheckCtx(graph->Context(), {X, Z}, {"U_data", "Out"});
   });
 
-DGL_REGISTER_GLOBAL("kernel._CAPI_DGLKernelCopyESum")
+DGL_REGISTER_GLOBAL("kernel2._CAPI_DGLKernelCopyESum")
 .set_body([] (DGLArgs args, DGLRetValue* rv) {
     HeteroGraphRef graph = args[0];
     NDArray Y = args[1];
@@ -57,7 +57,7 @@ DGL_REGISTER_GLOBAL("kernel._CAPI_DGLKernelCopyESum")
     CheckCtx(graph->Context(), {Y, Z}, {"E_data", "Out"});
   });
 
-DGL_REGISTER_GLOBAL("kernel._CAPI_DGLKernelRowToNonZero")
+DGL_REGISTER_GLOBAL("kernel2._CAPI_DGLKernelRowToNonZero")
 .set_body([] (DGLArgs args, DGLRetValue* rv) {
     HeteroGraphRef graph = args[0];
     NDArray X = args[1];
@@ -65,7 +65,7 @@ DGL_REGISTER_GLOBAL("kernel._CAPI_DGLKernelRowToNonZero")
     CheckCtx(graph->Context(), {X, Z}, {"node_data", "Out"});
   });
 
-DGL_REGISTER_GLOBAL("kernel._CAPI_DGLKernelUOpEMax")
+DGL_REGISTER_GLOBAL("kernel2._CAPI_DGLKernelUOpEMax")
 .set_body([] (DGLArgs args, DGLRetValue* rv) {
     const std::string op = args[0];
     HeteroGraphRef graph = args[1];
@@ -78,7 +78,7 @@ DGL_REGISTER_GLOBAL("kernel._CAPI_DGLKernelUOpEMax")
         {"U_data", "E_data", "Out", "U_index", "E_index"});
   });
 
-DGL_REGISTER_GLOBAL("kernel._CAPI_DGLKernelUOpEMin")
+DGL_REGISTER_GLOBAL("kernel2._CAPI_DGLKernelUOpEMin")
 .set_body([] (DGLArgs args, DGLRetValue* rv) {
     const std::string op = args[0];
     HeteroGraphRef graph = args[1];
@@ -91,7 +91,7 @@ DGL_REGISTER_GLOBAL("kernel._CAPI_DGLKernelUOpEMin")
         {"U_data", "E_data", "Out", "U_index", "E_index"});
   });
 
-DGL_REGISTER_GLOBAL("kernel._CAPI_DGLKernelUOpV")
+DGL_REGISTER_GLOBAL("kernel2._CAPI_DGLKernelUOpV")
 .set_body([] (DGLArgs args, DGLRetValue* rv) {
     const std::string op = args[0];
     HeteroGraphRef graph = args[1];

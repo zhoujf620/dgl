@@ -1,4 +1,7 @@
+import numpy as np
+
 from ._ffi.function import _init_api
+from .base import DGLError
 from . import ndarray as nd
 
 def infer_broadcast_shape(shp1, shp2):
@@ -12,7 +15,16 @@ def infer_broadcast_shape(shp1, shp2):
     -------
     shape after broadcasting
     """
-    pass
+    pad_shp1, pad_shp2 = shp1, shp2
+    if len(shp1) > len(shp2):
+        pad_shp2 = (1,) * (len(shp1) - len(shp2)) + shp2
+    elif len(shp1) < len(shp2):
+        pad_shp1 = (1,) * (len(shp2) - len(shp1)) + shp1
+    for d1, d2 in zip(pad_shp1, pad_shp2):
+        if d1 != d2 and d1 != 1 and d2 != 1:
+            raise DGLError("Feature shapes {} and {} are not valid for broadcasting."
+                    .format(shp1, shp2))
+    return tuple(max(d1, d2) for d1, d2 in zip(pad_shp1, pad_shp2))
 
 def u_op_e_sum(op, gidx, X, Y, Z):
     """
@@ -105,4 +117,4 @@ def u_op_v(op, gidx, X, Y, Z):
     """
     _CAPI_DGLKernelUOpV(op, gidx, X, Y, Z)
 
-_init_api("dgl.kernel")
+_init_api("dgl.kernel2")

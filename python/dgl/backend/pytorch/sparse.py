@@ -7,7 +7,8 @@ class UMulESum(th.autograd.Function):
     @staticmethod
     def forward(ctx, g, X, Y):
         bshape = K.infer_broadcast_shape(X.shape[1:], Y.shape[1:])
-        Z = th.zeros((g.number_of_nodes(1),) + bshape, device=X.device, dtype=X.dtype)
+        dtid = g.number_of_ntypes() - 1
+        Z = th.zeros((g.number_of_nodes(dtid),) + bshape, device=X.device, dtype=X.dtype)
         K.u_op_e_sum('mul', g,
                      to_dgl_nd(X),
                      to_dgl_nd(Y),
@@ -33,7 +34,8 @@ class UAddESum(th.autograd.Function):
     @staticmethod
     def forward(ctx, g, X, Y):
         bshape = K.infer_broadcast_shape(X.shape[1:], Y.shape[1:])
-        Z = th.zeros((g.number_of_nodes(1),) + bshape, device=X.device, dtype=X.dtype)
+        dtid = g.number_of_ntypes() - 1
+        Z = th.zeros((g.number_of_nodes(dtid),) + bshape, device=X.device, dtype=X.dtype)
         K.u_op_e_sum('add', g,
                      to_dgl_nd(X),
                      to_dgl_nd(Y),
@@ -59,7 +61,8 @@ class UMulEMax(th.autograd.Function):
     @staticmethod
     def forward(ctx, g, X, Y):
         bshape = K.infer_broadcast_shape(X.shape[1:], Y.shape[1:])
-        Z = th.zeros((g.number_of_nodes(1),) + bshape, device=X.device, dtype=X.dtype)
+        dtid = g.number_of_ntypes() - 1
+        Z = th.zeros((g.number_of_nodes(dtid),) + bshape, device=X.device, dtype=X.dtype)
         argX = th.zeros((Z.size(0),), device=X.device, dtype=getattr(th, g.dtype))
         argY = th.zeros((Z.size(0),), device=X.device, dtype=getattr(th, g.dtype))
         K.u_op_e_max('mul', g,
@@ -90,7 +93,8 @@ class UMulEMin(th.autograd.Function):
     @staticmethod
     def forward(ctx, g, X, Y):
         bshape = K.infer_broadcast_shape(X.shape[1:], Y.shape[1:])
-        Z = th.zeros((g.number_of_nodes(1),) + bshape, device=X.device, dtype=X.dtype)
+        dtid = g.number_of_ntypes() - 1
+        Z = th.zeros((g.number_of_nodes(dtid),) + bshape, device=X.device, dtype=X.dtype)
         argX = th.zeros((Z.size(0),), device=X.device, dtype=getattr(th, g.dtype))
         argY = th.zeros((Z.size(0),), device=X.device, dtype=getattr(th, g.dtype))
         K.u_op_e_min('mul', g,
@@ -111,7 +115,8 @@ class UAddEMax(th.autograd.Function):
     @staticmethod
     def forward(ctx, g, X, Y):
         bshape = K.infer_broadcast_shape(X.shape[1:], Y.shape[1:])
-        Z = th.zeros((g.number_of_nodes(1),) + bshape, device=X.device, dtype=X.dtype)
+        dtid = g.number_of_ntypes() - 1
+        Z = th.zeros((g.number_of_nodes(dtid),) + bshape, device=X.device, dtype=X.dtype)
         argX = th.zeros((Z.size(0),), device=X.device, dtype=getattr(th, g.dtype))
         argY = th.zeros((Z.size(0),), device=X.device, dtype=getattr(th, g.dtype))
         K.u_op_e_max('add', g,
@@ -142,7 +147,8 @@ class UAddEMin(th.autograd.Function):
     @staticmethod
     def forward(ctx, g, X, Y):
         bshape = K.infer_broadcast_shape(X.shape[1:], Y.shape[1:])
-        Z = th.zeros((g.number_of_nodes(1),) + bshape, device=X.device, dtype=X.dtype)
+        dtid = g.number_of_ntypes() - 1
+        Z = th.zeros((g.number_of_nodes(dtid),) + bshape, device=X.device, dtype=X.dtype)
         argX = th.zeros((Z.size(0),), device=X.device, dtype=getattr(th, g.dtype))
         argY = th.zeros((Z.size(0),), device=X.device, dtype=getattr(th, g.dtype))
         K.u_op_e_min('add', g,
@@ -178,7 +184,8 @@ class RowToNonZero(th.autograd.Function):
 class CopyESum(th.autograd.Function):
     @staticmethod
     def forward(ctx, g, Y):
-        Z = th.zeros((g.number_of_nodes(1), ) + Y.shape[1:], device=Y.device, dtype=Y.dtype)
+        dtid = g.number_of_ntypes() - 1
+        Z = th.zeros((g.number_of_nodes(dtid), ) + Y.shape[1:], device=Y.device, dtype=Y.dtype)
         K.copy_e_sum(g, to_dgl_nd(Y), to_dgl_nd(Z))
         ctx.backward_cache = g
         return Z
@@ -195,7 +202,8 @@ class CopyESum(th.autograd.Function):
 class CopyUSum(th.autograd.Function):
     @staticmethod
     def forward(ctx, g, X):
-        Z = th.zeros((g.number_of_nodes(1), ) + X.shape[1:], device=X.device, dtype=X.dtype)
+        dtid = g.number_of_ntypes() - 1
+        Z = th.zeros((g.number_of_nodes(dtid), ) + X.shape[1:], device=X.device, dtype=X.dtype)
         K.copy_u_sum(g, to_dgl_nd(X), to_dgl_nd(Z))
         ctx.backward_cache = g
         return Z

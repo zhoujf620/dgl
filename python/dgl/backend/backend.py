@@ -1284,3 +1284,86 @@ def sync():
     that all computation is complete after this function call.
     """
     pass
+
+###############################################################################
+# Message passing APIs
+# --------------------
+copy_e_sum = None
+copy_u_sum = None
+row_to_nonzero = None
+
+u_add_e_sum = None
+u_mul_e_sum = None
+u_sub_e_sum = None
+u_div_e_sum = None
+
+e_add_u_sum = None
+e_mul_u_sum = None
+e_sub_u_sum = None
+e_div_u_sum = None
+
+e_add_v_sum = None
+e_mul_v_sum = None
+e_sub_v_sum = None
+e_div_v_sum = None
+
+v_add_e_sum = None
+v_mul_e_sum = None
+v_sub_e_sum = None
+v_div_e_sum = None
+
+u_add_e_max = None
+u_mul_e_max = None
+u_sub_e_max = None
+u_div_e_max = None
+
+e_add_u_max = None
+e_mul_u_max = None
+e_sub_u_max = None
+e_div_u_max = None
+
+e_add_v_max = None
+e_mul_v_max = None
+e_sub_v_max = None
+e_div_v_max = None
+
+v_add_e_max = None
+v_mul_e_max = None
+v_sub_e_max = None
+v_div_e_max = None
+
+u_add_e_min = None
+u_mul_e_min = None
+u_sub_e_min = None
+u_div_e_min = None
+
+e_add_u_min = None
+e_mul_u_min = None
+e_sub_u_min = None
+e_div_u_min = None
+
+e_add_v_min = None
+e_mul_v_min = None
+e_sub_v_min = None
+e_div_v_min = None
+
+v_add_e_min = None
+v_mul_e_min = None
+v_sub_e_min = None
+v_div_e_min = None
+
+u_add_v = None
+u_mul_v = None
+u_sub_v = None
+u_div_v = None
+u_dot_v = None
+
+v_add_u = None
+v_mul_u = None
+v_sub_u = None
+v_div_u = None
+v_dot_u = None
+
+e_sub_v = None
+e_div_v = None
+e_mul_v = None
