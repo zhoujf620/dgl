@@ -54,8 +54,11 @@ IdArray Full(int64_t val, int64_t length, uint8_t nbits, DLContext ctx) {
 }
 
 IdArray AsNumBits(IdArray arr, uint8_t bits) {
+  CHECK(bits == 32 || bits == 64) << "invalid number of integer bits";
+  if (arr->dtype.bits == bits)
+    return arr;
   IdArray ret;
-  ATEN_XPU_SWITCH(arr->ctx.device_type, XPU, {
+  ATEN_XPU_SWITCH_CUDA(arr->ctx.device_type, XPU, {
     ATEN_ID_TYPE_SWITCH(arr->dtype, IdType, {
       ret = impl::AsNumBits<XPU, IdType>(arr, bits);
     });
