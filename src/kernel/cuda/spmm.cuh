@@ -23,9 +23,9 @@ namespace cuda {
 __device__ __forceinline__ void UnravelRavel(
     const int64_t idx, const int ndim, const int64_t* out_shape, const int64_t* out_stride,
     const int64_t* lhs_shape, const int64_t* lhs_stride,
-    const int64_t* rhs_shape, const int64_t* rhs_stride, int64_t *lhs_out, int64_t *rhs_out) {
+    const int64_t* rhs_shape, const int64_t* rhs_stride,
+    int64_t *lhs_out, int64_t *rhs_out) {
   if (out_stride[0] == lhs_stride[0]) {
-#pragma unroll
     for (int d = 0; d < ndim; ++d) {
       int64_t o_sh = out_shape[d];
       int64_t o_st = out_stride[d];
@@ -42,7 +42,6 @@ __device__ __forceinline__ void UnravelRavel(
     }
     *lhs_out = idx;
   } else {
-#pragma unroll
     for (int d = 0; d < ndim; ++d) {
       int64_t o_sh = out_shape[d];
       int64_t o_st = out_stride[d];
@@ -65,11 +64,11 @@ __device__ __forceinline__ void UnravelRavel(
 template <typename Idx, typename DType,
           typename BinaryOp, typename ReduceOp>
 __global__ void SpMMCooKernel(
-  DType *nfeat, DType *efeat, DType *out,
+  DType *nfeat, DType *efeat, DType *out, Idx *arg_out_n, Idx *arg_out_e,
   Idx *row, Idx *col, Idx* edge_map,
-  int64_t N, int64_t M, int64_t E,
-  int64_t *nfeat_shp, int64_t efeat_shp, int64_t out_shp,
-  int64_t nfeat_dim, int64_t efeat_dim, int64_t out_dim,
+  int64_t N, int64_t M, int64_t E, int64_t ndim,
+  int64_t *nbcast_off, int64_t *ebcast_off,
+  int64_t *nfeat_shp, int64_t *efeat_shp, int64_t *out_shp,
   int64_t nfeat_stride, int64_t efeat_stride, int64_t out_stride) {
   // SPMM with COO.
   const Idx ty = blockIdx.y * blockDim.y + threadIdx.y;
@@ -78,27 +77,52 @@ __global__ void SpMMCooKernel(
     const Idx src = _ldg(row + ty);
     const Idx dst = _ldg(col + ty);
     const Idx eid = _ldg(edge_map + ty);
-    const len = 4; // TODO(zihao): change it
     {
       int64_t tx = blockIdx.x * blockDim.x + threadIdx.x;
       const int64_t stride_x = blockDim.x * gridDim.x;
-      const int64_t len = gdata->data_len;
-      Idx lid = src;
-      Idx rid = eid;
-      Idx oid = dst;
-      DType* lhsoff = nfeat + lid * nfeat_stride * len; //data with len size
-      DType* rhsoff = efeat + rid * efeat_stride * len;
-      DType* outoff = out + oid * out_stride * len;
+      DType* lhsoff = BinaryOp::UseNode() ? (nfeat + src * nfeat_stride): nullptr;
+      DType* rhsoff = BinaryOp::UseEdge() ? (efeat + eid * efeat_stride): nullptr;
+      DType* outoff = out + dst * out_stride;
+      Idx* outargnoff = ReduceOp::RequireArgX() ? (arg_out_n + dst * out_stride): nullptr;
+      Idx* outargeoff = ReduceOp::RequireArgY() ? (arg_out_e + dst * out_stride): nullptr;
       while (tx < out_stride) {
-        int64_t lhs_add = 0;
-        int64_t rhs_add = 0;
-        /*
-        UnravelRavel(tx, gdata->ndim, gdata->out_shape, gdata->out_stride,
-            gdata->lhs_shape, gdata->lhs_stride,
-            gdata->rhs_shape, gdata->rhs_stride, &lhs_add, &rhs_add);
-        */
-        DType out = BinaryOp::Call(lhsoff + lhs_add * len, rhsoff + rhs_add * len, len);
-        outoff[tx] = out; // TODO(zihao): atomic
+        DType out = BinaryOp::Call(lhsoff + nbcast_off[tx], rhsoff + ebcast_off[tx]);
+        ReduceOp::Call(tx, outoff, outargnoff, outargeoff, out, src, eid);
+        tx += stride_x;
+      }
+    }
+    ty += stride_y;
+  }
+}
+
+__global__ void SpMMCsrKernel(
+  DType *nfeat, DType *efeat, DType *out, Idx *arg_out_n, Idx *arg_out_e,
+  Idx *indptr, Idx *indices, Idx *edge_map,
+  int64_t N, int64_t M, int64_t E, int64_t ndim,
+  int64_t *nbcast_off, int64_t *ebcast_off,
+  int64_t *nfeat_shp, int64_t *efeat_shp, int64_t *out_shp,
+  int64_t nfeat_stride, int64_t efeat_stride, int64_t out_stride) {
+  // SPMM with COO.
+  const Idx ty = blockIdx.y * blockDim.y + threadIdx.y;
+  const Idx stride_y = blockDim.y * gridDim.y;
+  Idx start = 0, end = indptr[dst];
+  while (ty < M) {
+    const Idx dst = ty;
+    for (Idx i = indptr[dst]; i < indptr[dst + 1]; ++i) {
+      const Idx eid = _ldg(edge_map + i);
+      const Idx src = _ldg(indptr + i);
+      int64_t tx = blockIdx.x * blockDim.x + threadIdx.x;
+      const int64_t stride_x = blockDim.x * gridDim.x;
+      DType* lhsoff = BinaryOp::UseNode() ? (nfeat + src * nfeat_stride): nullptr;
+      DType* rhsoff = BinaryOp::UseEdge() ? (efeat + eid * efeat_stride): nullptr;
+      DType* outoff = out + dst * out_stride;
+      Idx* outargnoff = ReduceOp::RequireArgX() ? (arg_out_n + dst * out_stride): nullptr;
+      Idx* outargeoff = ReduceOp::RequireArgY() ? (arg_out_e + dst * out_stride): nullptr;
+      while (tx < out_stride) {
+        int64_t lhs_add = nbcast_off[tx];
+        int64_t rhs_add = ebcast_off[tx];
+        DType out = BinaryOp::Call(lhsoff + lhs_add, rhsoff + rhs_ad);
+        ReduceOp::Call(tx, outoff, outargnoff, outargeoff, out, src, eid);
         tx += stride_x;
       }
     }
@@ -108,46 +132,34 @@ __global__ void SpMMCooKernel(
 
 template <typename Idx, typename DType,
           typename BinaryOp, typename ReduceOp>
-__global__ void SpMMCsrKernel(
-    DType *nfeat, DType *efeat, DType *out,
-    Idx *indptr, Idx *indices, Idx *eid,
-    int64_t *nfeat_shp, int64_t efeat_shp, int64_t out_shp,
-    int64_t nfeat_dim, int64_t efeat_dim, int64_t out_dim) {
-) {
-
-}
-
-template <int XPU, int NDim, typename Idx, typename DType,
-          typename BinaryOp, typename ReduceOp>
 void SpMMCoo(
     dgl::aten::COOMatrix coo,
     NDArray nfeat,
     NDArray efeat,
     NDArray out) {
-
+  // TODO(zihao)
 }
 
-template <int XPU, int NDim, typename Idx, typename DType,
+template <typename Idx, typename DType,
           typename BinaryOp, typename ReduceOp>
 void SpMMCsr(
     dgl::aten::CSRMatrix csr,
     NDArray nfeat,
     NDArray efeat,
     NDArray out) {
-
+  // TODO(zihao)
 }
 
-template <int XPU, int NDim, typename Idx, typename DType,
+template <typename Idx, typename DType,
           typename ReduceOp>
 void CallSPMM(
   const UnitGraph* graph,
-  BcastGData<NDim, Idx, DType>* gdata,
   NDArray nfeat,
   NDArray efeat,
   NDArray out,
   const SparseFormat preferred_format = SparseFormat::kCsc,
   ) {
-  
+  // TODO(zihao)
 )
 
 
