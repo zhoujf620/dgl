@@ -541,11 +541,7 @@ std::vector<NDArray> COOGetDataAndIndices(
 }
 
 COOMatrix COOTranspose(COOMatrix coo) {
-  COOMatrix ret;
-  ATEN_COO_SWITCH(coo, XPU, IdType, {
-    ret = impl::COOTranspose<XPU, IdType>(coo);
-  });
-  return ret;
+  return COOMatrix(coo.num_cols, coo.num_rows, coo.col, coo.row, coo.data);
 }
 
 CSRMatrix COOToCSR(COOMatrix coo) {
