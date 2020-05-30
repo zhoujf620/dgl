@@ -3638,29 +3638,6 @@ class DGLHeteroGraph(object):
                                           apply_node_func)
             Runtime.run(prog)
 
-
-    def update_all2(self, mfunc, rfunc, etype=None):
-        # only one type of edges
-        etid = self.get_etype_id(etype)
-        stid, dtid = self._graph.metagraph.find_edge(etid)
-        # TODO: ctx
-        srcframe = self._node_frames[stid]
-        dstframe = self._node_frames[dtid]
-        eframe = self._edge_frames[etid]
-        assert isinstance(mfunc, MessageFunction)
-        assert isinstance(rfunc, ReduceFunction)
-        assert rfunc.msg_field == mfunc.out_field
-        op = getattr(F, '%s_%s' % (mfunc.name, rfunc.name))
-        if isinstance(mfunc, BinaryMessageFunction):
-            X, Y = mfunc.fetch_inputs(srcframe, dstframe, eframe)
-            gidx = self._graph.get_unitgraph(etid, utils.to_dgl_context(F.context(X)))
-            Z = op(gidx, X, Y)
-        else:
-            X = mfunc.fetch_inputs(srcframe, dstframe, eframe)
-            gidx = self._graph.get_unitgraph(etid, utils.to_dgl_context(F.context(X)))
-            Z = op(gidx, X)
-        dstframe[rfunc.out_field] = Z
-
     def multi_update_all(self, etype_dict, cross_reducer, apply_node_func=None):
         r"""Send and receive messages along all edges.
 
@@ -4783,3 +4760,47 @@ def check_idtype_dict(graph_dtype, tensor_dict):
     """check whether the dtypes of tensors in dict are consistent with graph's dtype"""
     for _, v in tensor_dict.items():
         check_same_dtype(graph_dtype, v)
+
+#### new stuffs
+def update_all2(self, mfunc, rfunc, etype=None):
+    # only one type of edges
+    etid = self.get_etype_id(etype)
+    stid, dtid = self._graph.metagraph.find_edge(etid)
+    srcframe = self._node_frames[stid]
+    dstframe = self._node_frames[dtid]
+    eframe = self._edge_frames[etid]
+    assert isinstance(mfunc, MessageFunction)
+    assert isinstance(rfunc, ReduceFunction)
+    assert rfunc.msg_field == mfunc.out_field
+    op = getattr(F, '%s_%s' % (mfunc.name, rfunc.name))
+    if isinstance(mfunc, BinaryMessageFunction):
+        X, Y = mfunc.fetch_inputs(srcframe, dstframe, eframe)
+        gidx = self._graph.get_unitgraph(etid, utils.to_dgl_context(F.context(X)))
+        Z = op(gidx, X, Y)
+    else:
+        X = mfunc.fetch_inputs(srcframe, dstframe, eframe)
+        gidx = self._graph.get_unitgraph(etid, utils.to_dgl_context(F.context(X)))
+        Z = op(gidx, X)
+    dstframe[rfunc.out_field] = Z
+
+def apply_edges2(self, func, edges=ALL, etype=None):
+    check_same_dtype(self._idtype_str, edges)
+    etid = self.get_etype_id(etype)
+    stid, dtid = self._graph.metagraph.find_edge(etid)
+    srcframe = self._node_frames[stid]
+    dstframe = self._node_frames[dtid]
+    eframe = self._edge_frames[etid]
+    assert isinstance(func, MessageFunction)
+    op = getattr(F, func.name)
+    if isinstance(func, BinaryMessageFunction):
+        X, Y = func.fetch_inputs(srcframe, dstframe, eframe)
+        gidx = self._graph.get_unitgraph(etid, utils.to_dgl_context(F.context(X)))
+        Z = op(gidx, X, Y)
+    else:
+        X = func.fetch_inputs(srcframe, dstframe, eframe)
+        gidx = self._graph.get_unitgraph(etid, utils.to_dgl_context(F.context(X)))
+        Z = op(gidx, X)
+    eframe[func.out_field] = Z
+
+DGLHeteroGraph.update_all2 = update_all2
+DGLHeteroGraph.apply_edges2 = apply_edges2

@@ -53,7 +53,7 @@ class UAddESum(th.autograd.Function):
             dX = copy_u_sum(K.transpose(g), dZ)
             dX = reduce_on_broadcast_dim(dX, X.shape)
         if ctx.needs_input_grad[2]:
-            dY = row_to_nonzero(K.transpose(g), dZ)
+            dY = copy_u(K.transpose(g), dZ)
             dY = reduce_on_broadcast_dim(dY, Y.shape)
         return None, dX, dY
 
@@ -165,11 +165,11 @@ class UAddEMin(th.autograd.Function):
     def backward(ctx, dZ):
         return UAddEMax.backward(ctx, dZ)
 
-class RowToNonZero(th.autograd.Function):
+class CopyU(th.autograd.Function):
     @staticmethod
     def forward(ctx, g, X):
         Z = th.zeros((g.number_of_edges(0), ) + X.shape[1:], device=X.device, dtype=X.dtype)
-        K.row_to_nonzero(g, to_dgl_nd(X), to_dgl_nd(Z))
+        K.copy_u(g, to_dgl_nd(X), to_dgl_nd(Z))
         ctx.backward_cache = g
         return Z
 
@@ -195,7 +195,7 @@ class CopyESum(th.autograd.Function):
         g = ctx.backward_cache
         dY = None
         if ctx.needs_input_grad[1]:
-            dY = row_to_nonzero(g, dZ)
+            dY = copy_u(g, dZ)
         return None, dY
 
 class CopyEMax(th.autograd.Function):
@@ -353,7 +353,7 @@ copy_e_min = CopyEMin.apply
 copy_u_sum = CopyUSum.apply
 copy_u_max = CopyUMax.apply
 copy_u_min = CopyUMin.apply
-row_to_nonzero = RowToNonZero.apply
+copy_u = CopyU.apply
 
 u_add_e_sum = UAddESum.apply
 u_mul_e_sum = UMulESum.apply
@@ -429,10 +429,10 @@ v_dot_u = lambda g, X, Y : u_dot_v(K.transpose(g), Y, X)
 
 # tmp hack
 def e_sub_v(g, X, Y):
-    return X - row_to_nonzero(K.transpose(g), Y)
+    return X - copy_u(K.transpose(g), Y)
 
 def e_div_v(g, X, Y):
-    return X / row_to_nonzero(K.transpose(g), Y)
+    return X / copy_u(K.transpose(g), Y)
 
 def e_mul_v(g, X, Y):
-    return X * row_to_nonzero(K.transpose(g), Y)
+    return X * copy_u(K.transpose(g), Y)

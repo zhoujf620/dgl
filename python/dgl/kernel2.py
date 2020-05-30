@@ -134,7 +134,7 @@ def copy_e_min(gidx, Y, Z, argY):
     """
     _CAPI_DGLKernelCopyEMin(gidx, Y, Z, argY)
 
-def row_to_nonzero(gidx, X, Z):
+def copy_u(gidx, X, Z):
     """
     Parameters
     ----------
@@ -142,7 +142,7 @@ def row_to_nonzero(gidx, X, Z):
     Y : (E, D)
     Z : out tensor
     """
-    _CAPI_DGLKernelRowToNonZero(gidx, X, Z)
+    _CAPI_DGLKernelCopyU(gidx, X, Z)
 
 def u_op_v(op, gidx, X, Y, Z):
     """

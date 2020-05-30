@@ -93,12 +93,12 @@ DGL_REGISTER_GLOBAL("kernel2._CAPI_DGLKernelCopyEMin")
     CheckCtx(graph->Context(), {Y, Z, argY}, {"E_data", "Out", "E_index"});
   });
 
-DGL_REGISTER_GLOBAL("kernel2._CAPI_DGLKernelRowToNonZero")
+DGL_REGISTER_GLOBAL("kernel2._CAPI_DGLKernelCopyU")
 .set_body([] (DGLArgs args, DGLRetValue* rv) {
     HeteroGraphRef graph = args[0];
     NDArray X = args[1];
     NDArray Z = args[2];
-    CheckCtx(graph->Context(), {X, Z}, {"node_data", "Out"});
+    CheckCtx(graph->Context(), {X, Z}, {"U_data", "Out"});
   });
 
 DGL_REGISTER_GLOBAL("kernel2._CAPI_DGLKernelUOpEMax")
