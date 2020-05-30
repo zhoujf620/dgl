@@ -383,8 +383,10 @@ std::vector<NDArray> CSRGetDataAndIndices(
 
 CSRMatrix CSRTranspose(CSRMatrix csr) {
   CSRMatrix ret;
-  ATEN_CSR_SWITCH(csr, XPU, IdType, {
-    ret = impl::CSRTranspose<XPU, IdType>(csr);
+  ATEN_XPU_SWITCH_CUDA(csr.indptr->ctx.device_type, XPU, {
+    ATEN_ID_TYPE_SWITCH(csr.indptr->dtype, IdType, {
+      ret = impl::CSRTranspose<XPU, IdType>(csr);
+    });
   });
   return ret;
 }
