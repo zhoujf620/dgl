@@ -210,6 +210,12 @@ class NDArray {
    * \brief Get the size of the array in the number of bytes.
    */
   size_t GetSize() const;
+
+  /*!
+   * \brief Get the number of elemetns in this array.
+   */
+  int64_t Numel() const;
+
   /*!
    * \brief Create a NDArray backed by a dlpack tensor.
    *
