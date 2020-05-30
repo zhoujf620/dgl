@@ -198,6 +198,41 @@ class CopyESum(th.autograd.Function):
             dY = row_to_nonzero(g, dZ)
         return None, dY
 
+class CopyEMax(th.autograd.Function):
+    @staticmethod
+    def forward(ctx, g, Y):
+        dtid = g.number_of_ntypes() - 1
+        Z = th.zeros((g.number_of_nodes(dtid), ) + Y.shape[1:], device=Y.device, dtype=Y.dtype)
+        argY = th.zeros((Z.size(0),), device=Y.device, dtype=getattr(th, g.dtype))
+        K.copy_e_max(g, to_dgl_nd(Y), to_dgl_nd(Z), to_dgl_nd(argY))
+        ctx.backward_cache = g
+        ctx.save_for_backward(Y, argY)
+        return Z
+
+    @staticmethod
+    def backward(ctx, dZ):
+        g = ctx.backward_cache
+        Y, argY = ctx.saved_tensors
+        dY = None
+        if ctx.needs_input_grad[1]:
+            dY = th.zeros_like(Y)
+            dY[argY] = dZ
+        return None, dY
+
+class CopyEMin(th.autograd.Function):
+    @staticmethod
+    def forward(ctx, g, Y):
+        dtid = g.number_of_ntypes() - 1
+        Z = th.zeros((g.number_of_nodes(dtid), ) + Y.shape[1:], device=Y.device, dtype=Y.dtype)
+        argY = th.zeros((Z.size(0),), device=Y.device, dtype=getattr(th, g.dtype))
+        K.copy_e_min(g, to_dgl_nd(Y), to_dgl_nd(Z), to_dgl_nd(argY))
+        ctx.backward_cache = g
+        ctx.save_for_backward(Y, argY)
+        return Z
+
+    @staticmethod
+    def backward(ctx, dZ):
+        return CopyEMin.backward(ctx, dZ)
 
 class CopyUSum(th.autograd.Function):
     @staticmethod
@@ -215,6 +250,42 @@ class CopyUSum(th.autograd.Function):
         if ctx.needs_input_grad[1]:
             dX = copy_u_sum(K.transpose(g), dZ)
         return None, dX
+
+class CopyUMax(th.autograd.Function):
+    @staticmethod
+    def forward(ctx, g, X):
+        dtid = g.number_of_ntypes() - 1
+        Z = th.zeros((g.number_of_nodes(dtid), ) + X.shape[1:], device=X.device, dtype=X.dtype)
+        argX = th.zeros((Z.size(0),), device=X.device, dtype=getattr(th, g.dtype))
+        K.copy_u_max(g, to_dgl_nd(X), to_dgl_nd(Z), to_dgl_nd(argX))
+        ctx.backward_cache = g
+        ctx.save_for_backward(X, argX)
+        return Z
+
+    @staticmethod
+    def backward(ctx, dZ):
+        g = ctx.backward_cache
+        X, argX = ctx.saved_tensors
+        dX = None
+        if ctx.needs_input_grad[1]:
+            dX = th.zeros_like(X)
+            dX = th.scatter_add(dX, 0, argX, dZ)
+        return None, dX
+
+class CopyUMin(th.autograd.Function):
+    @staticmethod
+    def forward(ctx, g, X):
+        dtid = g.number_of_ntypes() - 1
+        Z = th.zeros((g.number_of_nodes(dtid), ) + X.shape[1:], device=X.device, dtype=X.dtype)
+        argX = th.zeros((Z.size(0),), device=X.device, dtype=getattr(th, g.dtype))
+        K.copy_u_min(g, to_dgl_nd(X), to_dgl_nd(Z), to_dgl_nd(argX))
+        ctx.backward_cache = g
+        ctx.save_for_backward(X, argX)
+        return Z
+
+    @staticmethod
+    def backward(ctx, dZ):
+        return CopyUMax.backward(ctx, dZ)
 
 class UMulV(th.autograd.Function):
     @staticmethod
@@ -277,7 +348,11 @@ class UDotV(th.autograd.Function):
         return UMulV.backward(ctx, dZ)
 
 copy_e_sum = CopyESum.apply
+copy_e_max = CopyEMax.apply
+copy_e_min = CopyEMin.apply
 copy_u_sum = CopyUSum.apply
+copy_u_max = CopyUMax.apply
+copy_u_min = CopyUMin.apply
 row_to_nonzero = RowToNonZero.apply
 
 u_add_e_sum = UAddESum.apply

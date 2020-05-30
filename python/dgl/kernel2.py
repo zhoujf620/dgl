@@ -38,36 +38,6 @@ def u_op_e_sum(op, gidx, X, Y, Z):
     """
     _CAPI_DGLKernelUOpESum(op, gidx, X, Y, Z)
 
-def copy_u_sum(gidx, X, Z):
-    """
-    Parameters
-    ----------
-    gidx : HeteroGraphIndex (must have only one relation)
-    X : (N1, D)
-    Z : out tensor
-    """
-    _CAPI_DGLKernelCopyUSum(gidx, X, Z)
-
-def copy_e_sum(gidx, Y, Z):
-    """
-    Parameters
-    ----------
-    gidx : HeteroGraphIndex (must have only one relation)
-    Y : (E, D)
-    Z : out tensor
-    """
-    _CAPI_DGLKernelCopyESum(gidx, Y, Z)
-
-def row_to_nonzero(gidx, X, Z):
-    """
-    Parameters
-    ----------
-    gidx : HeteroGraphIndex (must have only one relation)
-    Y : (E, D)
-    Z : out tensor
-    """
-    _CAPI_DGLKernelRowToNonZero(gidx, X, Z)
-
 def u_op_e_max(op, gidx, X, Y, Z, argX, argY):
     """
     Parameters
@@ -101,6 +71,78 @@ def u_op_e_min(op, gidx, X, Y, Z, argX, argY):
     arg_Y : (N2,)
     """
     _CAPI_DGLKernelUOpEMin(op, gidx, X, Y, Z, argX, argY)
+
+def copy_u_sum(gidx, X, Z):
+    """
+    Parameters
+    ----------
+    gidx : HeteroGraphIndex (must have only one relation)
+    X : (N1, D)
+    Z : out tensor
+    """
+    _CAPI_DGLKernelCopyUSum(gidx, X, Z)
+
+def copy_u_max(gidx, X, Z, argX):
+    """
+    Parameters
+    ----------
+    gidx : HeteroGraphIndex (must have only one relation)
+    X : (N1, D)
+    Z : out tensor
+    argX : (N2,) out tensor
+    """
+    _CAPI_DGLKernelCopyUMax(gidx, X, Z, argX)
+
+def copy_u_min(gidx, X, Z, argX):
+    """
+    Parameters
+    ----------
+    gidx : HeteroGraphIndex (must have only one relation)
+    X : (N1, D)
+    Z : out tensor
+    argX : (N2,) out tensor
+    """
+    _CAPI_DGLKernelCopyUMin(gidx, X, Z, argX)
+
+def copy_e_sum(gidx, Y, Z):
+    """
+    Parameters
+    ----------
+    gidx : HeteroGraphIndex (must have only one relation)
+    Y : (E, D)
+    Z : out tensor
+    """
+    _CAPI_DGLKernelCopyESum(gidx, Y, Z)
+
+def copy_e_max(gidx, Y, Z, argY):
+    """
+    Parameters
+    ----------
+    gidx : HeteroGraphIndex (must have only one relation)
+    Y : (E, D)
+    Z : out tensor
+    """
+    _CAPI_DGLKernelCopyEMax(gidx, Y, Z, argY)
+
+def copy_e_min(gidx, Y, Z, argY):
+    """
+    Parameters
+    ----------
+    gidx : HeteroGraphIndex (must have only one relation)
+    Y : (E, D)
+    Z : out tensor
+    """
+    _CAPI_DGLKernelCopyEMin(gidx, Y, Z, argY)
+
+def row_to_nonzero(gidx, X, Z):
+    """
+    Parameters
+    ----------
+    gidx : HeteroGraphIndex (must have only one relation)
+    Y : (E, D)
+    Z : out tensor
+    """
+    _CAPI_DGLKernelRowToNonZero(gidx, X, Z)
 
 def u_op_v(op, gidx, X, Y, Z):
     """

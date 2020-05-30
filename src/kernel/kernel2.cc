@@ -49,12 +49,48 @@ DGL_REGISTER_GLOBAL("kernel2._CAPI_DGLKernelCopyUSum")
     CheckCtx(graph->Context(), {X, Z}, {"U_data", "Out"});
   });
 
+DGL_REGISTER_GLOBAL("kernel2._CAPI_DGLKernelCopyUMax")
+.set_body([] (DGLArgs args, DGLRetValue* rv) {
+    HeteroGraphRef graph = args[0];
+    NDArray X = args[1];
+    NDArray Z = args[2];
+    NDArray argX = args[3];
+    CheckCtx(graph->Context(), {X, Z, argX}, {"U_data", "Out", "U_index"});
+  });
+
+DGL_REGISTER_GLOBAL("kernel2._CAPI_DGLKernelCopyUMin")
+.set_body([] (DGLArgs args, DGLRetValue* rv) {
+    HeteroGraphRef graph = args[0];
+    NDArray X = args[1];
+    NDArray Z = args[2];
+    NDArray argX = args[3];
+    CheckCtx(graph->Context(), {X, Z, argX}, {"U_data", "Out", "U_index"});
+  });
+
 DGL_REGISTER_GLOBAL("kernel2._CAPI_DGLKernelCopyESum")
 .set_body([] (DGLArgs args, DGLRetValue* rv) {
     HeteroGraphRef graph = args[0];
     NDArray Y = args[1];
     NDArray Z = args[2];
     CheckCtx(graph->Context(), {Y, Z}, {"E_data", "Out"});
+  });
+
+DGL_REGISTER_GLOBAL("kernel2._CAPI_DGLKernelCopyEMax")
+.set_body([] (DGLArgs args, DGLRetValue* rv) {
+    HeteroGraphRef graph = args[0];
+    NDArray Y = args[1];
+    NDArray Z = args[2];
+    NDArray argY = args[3];
+    CheckCtx(graph->Context(), {Y, Z, argY}, {"E_data", "Out", "E_index"});
+  });
+
+DGL_REGISTER_GLOBAL("kernel2._CAPI_DGLKernelCopyEMin")
+.set_body([] (DGLArgs args, DGLRetValue* rv) {
+    HeteroGraphRef graph = args[0];
+    NDArray Y = args[1];
+    NDArray Z = args[2];
+    NDArray argY = args[3];
+    CheckCtx(graph->Context(), {Y, Z, argY}, {"E_data", "Out", "E_index"});
   });
 
 DGL_REGISTER_GLOBAL("kernel2._CAPI_DGLKernelRowToNonZero")
