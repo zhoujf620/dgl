@@ -17,7 +17,6 @@ template <DLDeviceType XPU, typename IdType>
 CSRMatrix CSRTranspose(CSRMatrix csr) {
   CHECK(sizeof(IdType) == 4) << "CUDA CSR2CSC does not support int64.";
   auto* thr_entry = runtime::CUDAThreadEntry::ThreadLocal();
-  auto device = runtime::DeviceAPI::Get(csr.indptr->ctx);
   // allocate cusparse handle if needed
   if (!thr_entry->cusparse_handle) {
     CUSPARSE_CALL(cusparseCreate(&(thr_entry->cusparse_handle)));
@@ -32,15 +31,17 @@ CSRMatrix CSRTranspose(CSRMatrix csr) {
     data = aten::Range(0, nnz, bits, ctx);
   const int32_t* indptr_ptr = static_cast<int32_t*>(indptr->data);
   const int32_t* indices_ptr = static_cast<int32_t*>(indices->data);
-  const int32_t* data_ptr = static_cast<int32_t*>(data->data);
+  const void* data_ptr = data->data;
 
   NDArray t_indptr = aten::NewIdArray(csr.num_cols + 1, ctx, bits);
   NDArray t_indices = aten::NewIdArray(nnz, ctx, bits);
   NDArray t_data = aten::NewIdArray(nnz, ctx, bits);
   int32_t* t_indptr_ptr = static_cast<int32_t*>(t_indptr->data);
   int32_t* t_indices_ptr = static_cast<int32_t*>(t_indices->data);
-  int32_t* t_data_ptr = static_cast<int32_t*>(t_data->data);
+  void* t_data_ptr = t_data->data;
 
+#if __CUDA_API_VERSION >= 10010
+  auto device = runtime::DeviceAPI::Get(csr.indptr->ctx);
   // workspace
   size_t workspace_size;
   CUSPARSE_CALL(cusparseCsr2cscEx2_bufferSize(
@@ -64,6 +65,15 @@ CSRMatrix CSRTranspose(CSRMatrix csr) {
       CUSPARSE_CSR2CSC_ALG1,  // see cusparse doc for reference
       workspace));
   device->FreeWorkspace(ctx, workspace);
+#else
+  CUSPARSE_CALL(cusparseScsr2csc(
+      thr_entry->cusparse_handle,
+      csr.num_rows, csr.num_cols, nnz,
+      static_cast<const float*>(data_ptr), indptr_ptr, indices_ptr,
+      static_cast<float*>(t_data_ptr), t_indptr_ptr, t_indices_ptr,
+      CUSPARSE_ACTION_NUMERIC,
+      CUSPARSE_INDEX_BASE_ZERO));
+#endif
 
   return CSRMatrix(csr.num_cols, csr.num_rows,
                    t_indptr, t_indices, t_data,
