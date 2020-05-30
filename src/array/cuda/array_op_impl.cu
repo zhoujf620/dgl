@@ -19,6 +19,37 @@ int FindNumThreads(int dim, int max_nthrs) {
   return ret;
 }
 
+
+///////////////////////////// Range /////////////////////////////
+
+template <typename IdType>
+__global__ void _RangeKernel(IdType* out, IdType low, IdType length) {
+  int tx = blockIdx.x * blockDim.x + threadIdx.x;
+  int stride_x = gridDim.x * blockDim.x;
+  while (tx < length) {
+    out[tx] = low + tx;
+    tx += stride_x;
+  }
+}
+
+template <DLDeviceType XPU, typename IdType>
+IdArray Range(IdType low, IdType high, DLContext ctx) {
+  CHECK(high >= low) << "high must be bigger than low";
+  const IdType length = high - low;
+  IdArray ret = NewIdArray(length, ctx, sizeof(IdType) * 8);
+  IdType* ret_data = static_cast<IdType*>(ret->data);
+  auto* thr_entry = runtime::CUDAThreadEntry::ThreadLocal();
+  int nt = FindNumThreads(length, 1024);
+  int nb = (length + nt - 1) / nt;
+  _RangeKernel<IdType><<<nb, nt, 0, thr_entry->stream>>>(ret_data, low, length);
+  return ret;
+}
+
+template IdArray Range<kDLGPU, int32_t>(int32_t, int32_t, DLContext);
+template IdArray Range<kDLGPU, int64_t>(int64_t, int64_t, DLContext);
+
+///////////////////////////// AsNumBits /////////////////////////////
+
 template <typename InType, typename OutType>
 __global__ void _CastKernel(const InType* in, OutType* out, size_t length) {
   int tx = blockIdx.x * blockDim.x + threadIdx.x;

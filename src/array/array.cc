@@ -27,7 +27,7 @@ IdArray Clone(IdArray arr) {
 
 IdArray Range(int64_t low, int64_t high, uint8_t nbits, DLContext ctx) {
   IdArray ret;
-  ATEN_XPU_SWITCH(ctx.device_type, XPU, {
+  ATEN_XPU_SWITCH_CUDA(ctx.device_type, XPU, {
     if (nbits == 32) {
       ret = impl::Range<XPU, int32_t>(low, high, ctx);
     } else if (nbits == 64) {
@@ -392,13 +392,13 @@ CSRMatrix CSRTranspose(CSRMatrix csr) {
 COOMatrix CSRToCOO(CSRMatrix csr, bool data_as_order) {
   COOMatrix ret;
   if (data_as_order) {
-    ATEN_XPU_SWITCH(csr.indptr->ctx.device_type, XPU, {
+    ATEN_XPU_SWITCH_CUDA(csr.indptr->ctx.device_type, XPU, {
       ATEN_ID_TYPE_SWITCH(csr.indptr->dtype, IdType, {
         ret = impl::CSRToCOODataAsOrder<XPU, IdType>(csr);
       });
     });
   } else {
-    ATEN_XPU_SWITCH(csr.indptr->ctx.device_type, XPU, {
+    ATEN_XPU_SWITCH_CUDA(csr.indptr->ctx.device_type, XPU, {
       ATEN_ID_TYPE_SWITCH(csr.indptr->dtype, IdType, {
         ret = impl::CSRToCOO<XPU, IdType>(csr);
       });
@@ -550,8 +550,10 @@ COOMatrix COOTranspose(COOMatrix coo) {
 
 CSRMatrix COOToCSR(COOMatrix coo) {
   CSRMatrix ret;
-  ATEN_COO_SWITCH(coo, XPU, IdType, {
-    ret = impl::COOToCSR<XPU, IdType>(coo);
+  ATEN_XPU_SWITCH_CUDA(coo.row->ctx.device_type, XPU, {
+    ATEN_ID_TYPE_SWITCH(coo.row->dtype, IdType, {
+      ret = impl::COOToCSR<XPU, IdType>(coo);
+    });
   });
   return ret;
 }
