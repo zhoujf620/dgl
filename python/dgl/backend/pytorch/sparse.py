@@ -3,7 +3,7 @@ from .tensor import zerocopy_to_dgl_ndarray as to_dgl_nd
 from .tensor import zerocopy_from_dgl_ndarray as from_dgl_nd
 from ... import kernel2 as K
 
-def reduce_on_broadcast_dim(grad, shape):
+def _reduce_grad(grad, shape):
     """Reduce gradient on the broadcast dimension
 
     If there is broadcast in forward pass, gradients need to be reduced on
@@ -31,8 +31,9 @@ def reduce_on_broadcast_dim(grad, shape):
     in_shape = (1,) * num_to_squeeze + in_shape
     reduce_idx = th.nonzero(th.tensor(grad_shape) - th.tensor(in_shape))
     reduce_idx += 1  # skip batch dim
-    grad = grad.sum(dim=tuple(reduce_idx), keepdim=True)
-    return grad.view(-1, *in_shape)
+    if len(reduce_idx) > 0:
+        grad = grad.sum(dim=tuple(reduce_idx), keepdim=True)
+    return grad.view(-1, *shape[1:])
 
 class UMulESum(th.autograd.Function):
     @staticmethod
@@ -55,10 +56,10 @@ class UMulESum(th.autograd.Function):
         dX, dY = None, None
         if ctx.needs_input_grad[1]:
             dX = u_mul_e_sum(g.reverse(), dZ, Y)
-            dX = reduce_on_broadcast_dim(dX, X.shape)
+            dX = _reduce_grad(dX, X.shape)
         if ctx.needs_input_grad[2]:
             dY = u_mul_v(g, X, Y)
-            dY = reduce_on_broadcast_dim(dY, Y.shape)
+            dY = _reduce_grad(dY, Y.shape)
         return None, dX, dY
 
 class UAddESum(th.autograd.Function):
@@ -82,10 +83,10 @@ class UAddESum(th.autograd.Function):
         dX, dY = None, None
         if ctx.needs_input_grad[1]:
             dX = copy_u_sum(g.reverse(), dZ)
-            dX = reduce_on_broadcast_dim(dX, X.shape)
+            dX = _reduce_grad(dX, X.shape)
         if ctx.needs_input_grad[2]:
             dY = copy_u(g.reverse(), dZ)
-            dY = reduce_on_broadcast_dim(dY, Y.shape)
+            dY = _reduce_grad(dY, Y.shape)
         return None, dX, dY
 
 class UMulEMax(th.autograd.Function):
@@ -116,13 +117,13 @@ class UMulEMax(th.autograd.Function):
             argY = argY.long()
         if ctx.needs_input_grad[1]:
             dX = th.zeros_like(X)
-            deltaX = reduce_on_broadcast_dim(Y[argY] * dZ, X.shape)
+            deltaX = _reduce_grad(Y[argY] * dZ, X.shape)
             view_shape = (argX.shape[0],) + (1,) * (deltaX.ndim - 1)
             idx = argX.view(*view_shape).expand(*deltaX.shape)
             dX.scatter_add_(0, idx, deltaX)
         if ctx.needs_input_grad[2]:
             dY = th.zeros_like(Y)
-            dY[argY] = reduce_on_broadcast_dim(X[argX] * dZ, Y.shape)
+            dY[argY] = _reduce_grad(X[argX] * dZ, Y.shape)
         return None, dX, dY
 
 class UMulEMin(th.autograd.Function):
@@ -172,13 +173,13 @@ class UAddEMax(th.autograd.Function):
         dX, dY = None, None
         if ctx.needs_input_grad[1]:
             dX = th.zeros_like(X)
-            deltaX = reduce_on_broadcast_dim(dZ, X.shape)
+            deltaX = _reduce_grad(dZ, X.shape)
             view_shape = (argX.shape[0],) + (1,) * (deltaX.ndim - 1)
             idx = argX.view(*view_shape).expand(*deltaX.shape).long()
             dX.scatter_add_(0, idx, deltaX)
         if ctx.needs_input_grad[2]:
             dY = th.zeros_like(Y)
-            dY[argY.long()] = reduce_on_broadcast_dim(dZ, Y.shape)
+            dY[argY.long()] = _reduce_grad(dZ, Y.shape)
         return None, dX, dY
 
 class UAddEMin(th.autograd.Function):
@@ -216,7 +217,7 @@ class CopyU(th.autograd.Function):
         g = ctx.backward_cache
         dX = None
         if ctx.needs_input_grad[1]:
-            dX = copy_e_sum(adj, dZ)
+            dX = copy_e_sum(g.reverse(), dZ)
         return None, dX
 
 class CopyESum(th.autograd.Function):
@@ -270,7 +271,7 @@ class CopyEMin(th.autograd.Function):
 
     @staticmethod
     def backward(ctx, dZ):
-        return CopyEMin.backward(ctx, dZ)
+        return CopyEMax.backward(ctx, dZ)
 
 class CopyUSum(th.autograd.Function):
     @staticmethod
@@ -307,7 +308,9 @@ class CopyUMax(th.autograd.Function):
         dX = None
         if ctx.needs_input_grad[1]:
             dX = th.zeros_like(X)
-            dX = th.scatter_add(dX, 0, argX.long(), dZ)
+            view_shape = (argX.shape[0],) + (1,) * (dZ.ndim - 1)
+            idx = argX.view(*view_shape).expand(*dZ.shape).long()
+            dX.scatter_add_(0, idx, dZ)
         return None, dX
 
 class CopyUMin(th.autograd.Function):
@@ -342,10 +345,10 @@ class UMulV(th.autograd.Function):
         dX, dY = None, None
         if ctx.needs_input_grad[1]:
             dX = u_mul_e_sum(g.reverse(), Y, dZ)
-            dX = reduce_on_broadcast_dim(dX, X.shape)
+            dX = _reduce_grad(dX, X.shape)
         if ctx.needs_input_grad[2]:
             dY = u_mul_e_sum(g, X, dZ)
-            dY = reduce_on_broadcast_dim(dY, Y.shape)
+            dY = _reduce_grad(dY, Y.shape)
         return None, dX, dY
 
 class UAddV(th.autograd.Function):
@@ -365,10 +368,10 @@ class UAddV(th.autograd.Function):
         dX, dY = None, None
         if ctx.needs_input_grad[1]:
             dX = copy_e_sum(g.reverse(), dZ)
-            dX = reduce_on_broadcast_dim(dX, X.shape)
+            dX = _reduce_grad(dX, X.shape)
         if ctx.needs_input_grad[2]:
             dY = copy_e_sum(g, dZ)
-            dY = reduce_on_broadcast_dim(dY, Y.shape)
+            dY = _reduce_grad(dY, Y.shape)
         return None, dX, dY
 
 class UDotV(th.autograd.Function):
@@ -392,6 +395,7 @@ copy_u_sum = CopyUSum.apply
 copy_u_max = CopyUMax.apply
 copy_u_min = CopyUMin.apply
 copy_u = CopyU.apply
+copy_v = lambda g, X : copy_u(g.reverse(), X)
 
 u_add_e_sum = UAddESum.apply
 u_mul_e_sum = UMulESum.apply
