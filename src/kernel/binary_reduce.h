@@ -34,6 +34,9 @@ struct BcastInfo {
   int64_t data_len;
 };
 
+bool HasBcast(NDArray lhs, NDArray rhs);
+BcastInfo CalcBcastInfo(const std::string& op, NDArray lhs, NDArray rhs);
+
 /*
  * !\brief Compute the feature shape after binary reduce computation.
  */
