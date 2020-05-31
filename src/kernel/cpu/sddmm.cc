@@ -1,6 +1,5 @@
 #include "./sddmm.h"
 #include <dgl/array.h>
-#include "../binary_reduce.h"
 
 namespace dgl {
 namespace kernel {

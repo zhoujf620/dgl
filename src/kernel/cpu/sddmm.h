@@ -2,6 +2,7 @@
 #define DGL_KERNEL_CPU_SDDMM_CUH_
 
 #include <dgl/array.h>
+#include "../binary_reduce.h"
 
 namespace dgl {
 namespace kernel {
@@ -16,7 +17,9 @@ void SDDMMCsr(const aten::CSRMatrix& csr,
   const IdType* edges = has_idx? nullptr : static_cast<IdType*>(csr.data->data);
   const DType* X = Op::use_lhs? static_cast<DType*>(ufeat->data) : nullptr;
   const DType* Y = Op::use_rhs? static_cast<DType*>(vfeat->data) : nullptr;
-  const int64_t dim = out->shape[1];
+  int64_t dim = 1;
+  for (int i = 1; i < out->ndim; ++i)
+    dim *= out->shape[i];
   DType* O = static_cast<DType*>(out->data);
 #pragma omp parallel for
   for (IdType rid = 0; rid < csr.num_rows; ++rid) {
@@ -42,7 +45,9 @@ void SDDMMCoo(const aten::COOMatrix& coo,
   const IdType* edges = has_idx? static_cast<IdType*>(coo.data->data) : nullptr;
   const DType* X = Op::use_lhs? static_cast<DType*>(ufeat->data) : nullptr;
   const DType* Y = Op::use_rhs? static_cast<DType*>(vfeat->data) : nullptr;
-  const int64_t dim = out->shape[1];
+  int64_t dim = 1;
+  for (int i = 1; i < out->ndim; ++i)
+    dim *= out->shape[i];
   DType* O = static_cast<DType*>(out->data);
   const int64_t nnz = coo.row->shape[0];
 #pragma omp parallel for
@@ -57,6 +62,20 @@ void SDDMMCoo(const aten::COOMatrix& coo,
       out_off[k] = Op::Call(lhs_off, rhs_off);
     }
   }
+}
+
+template <typename IdType, typename DType, typename Op>
+void SDDMMBcastCsr(const BcastInfo& info,
+                   const aten::CSRMatrix& csr,
+                   NDArray ufeat, NDArray vfeat, NDArray out) {
+  LOG(FATAL) << "not implemented";
+}
+
+template <typename IdType, typename DType, typename Op>
+void SDDMMBcastCoo(const BcastInfo& info,
+                   const aten::COOMatrix& coo,
+                   NDArray ufeat, NDArray vfeat, NDArray out) {
+  LOG(FATAL) << "not implemented";
 }
 
 namespace op {

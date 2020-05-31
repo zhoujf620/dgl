@@ -2,6 +2,7 @@
 #define DGL_KERNEL_CPU_SPMM_CUH_
 
 #include <dgl/array.h>
+#include "../binary_reduce.h"
 
 namespace dgl {
 namespace kernel {
@@ -65,7 +66,9 @@ void SpMMSumCsr(const aten::CSRMatrix& csr,
   const IdType* edges = has_idx ? static_cast<IdType*>(csr.data->data) : nullptr;
   const DType* X = Op::use_lhs? static_cast<DType*>(ufeat->data) : nullptr;
   const DType* W = Op::use_rhs? static_cast<DType*>(efeat->data) : nullptr;
-  const int64_t dim = out->shape[1];
+  int64_t dim = 1;
+  for (int i = 1; i < out->ndim; ++i)
+    dim *= out->shape[i];
   DType* O = static_cast<DType*>(out->data);
 #pragma omp parallel for
   for (IdType rid = 0; rid < csr.num_rows; ++rid) {
@@ -96,7 +99,9 @@ void SpMMCmpCsr(const aten::CSRMatrix& csr,
   const IdType* edges = has_idx ? static_cast<IdType*>(csr.data->data) : nullptr;
   const DType* X = Op::use_lhs? static_cast<DType*>(ufeat->data) : nullptr;
   const DType* W = Op::use_rhs? static_cast<DType*>(efeat->data) : nullptr;
-  const int64_t dim = out->shape[1];
+  int64_t dim = 1;
+  for (int i = 1; i < out->ndim; ++i)
+    dim *= out->shape[i];
   DType* O = static_cast<DType*>(out->data);
   IdType* argX = Op::use_lhs? static_cast<IdType*>(argu->data) : nullptr;
   IdType* argW = Op::use_rhs? static_cast<IdType*>(arge->data) : nullptr;
@@ -130,6 +135,24 @@ void SpMMCmpCsr(const aten::CSRMatrix& csr,
         argw_off[k] = aw;
     }
   }
+}
+
+template <typename IdType, typename DType, typename Op>
+void SpMMBcastSumCsr(
+    const BcastInfo& info,
+    const aten::CSRMatrix& csr,
+    NDArray ufeat, NDArray efeat,
+    NDArray out) {
+  LOG(FATAL) << "not implemented";
+}
+
+template <typename IdType, typename DType, typename Op, typename Cmp>
+void SpMMBcastCmpCsr(
+    const BcastInfo& info,
+    const aten::CSRMatrix& csr,
+    NDArray ufeat, NDArray efeat,
+    NDArray out, NDArray argu, NDArray arge) {
+  LOG(FATAL) << "not implemented";
 }
 
 namespace op {
