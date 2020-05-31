@@ -88,6 +88,39 @@ void SpMMSumCsr(const aten::CSRMatrix& csr,
   }
 }
 
+template <typename IdType, typename DType, typename Op>
+void SpMMSumCoo(const aten::COOMatrix& coo,
+                NDArray ufeat, NDArray efeat,
+                NDArray out) {
+  const bool has_idx = !aten::IsNullArray(coo.data);
+  const IdType* row = static_cast<IdType*>(coo.row->data);
+  const IdType* col = static_cast<IdType*>(coo.col->data);
+  const IdType* edges = has_idx? static_cast<IdType*>(coo.data->data) : nullptr;
+  const DType* X = Op::use_lhs? static_cast<DType*>(ufeat->data) : nullptr;
+  const DType* W = Op::use_rhs? static_cast<DType*>(efeat->data) : nullptr;
+  int64_t dim = 1;
+  for (int i = 1; i < out->ndim; ++i)
+    dim *= out->shape[i];
+  DType* O = static_cast<DType*>(out->data);
+  const int64_t nnz = coo.row->shape[0];
+  // fill zero elements
+  memset(O, 0, out.GetSize());
+  // spmm
+#pragma omp parallel for
+  for (IdType i = 0; i < nnz; ++i) {
+    const IdType rid = row[i];
+    const IdType cid = col[i];
+    const IdType eid = has_idx? edges[i] : i;
+    DType* out_off = O + cid * dim;
+    for (int64_t k = 0; k < dim; ++k) {
+      const DType* lhs_off = Op::use_lhs? X + rid * dim + k : nullptr;
+      const DType* rhs_off = Op::use_rhs? W + eid * dim + k : nullptr;
+      const DType val = Op::Call(lhs_off, rhs_off);
+#pragma omp atomic
+      out_off[k] += val;
+    }
+  }
+}
 
 template <typename IdType, typename DType, typename Op, typename Cmp>
 void SpMMCmpCsr(const aten::CSRMatrix& csr,
@@ -125,7 +158,7 @@ void SpMMCmpCsr(const aten::CSRMatrix& csr,
           if (Op::use_lhs)
             ax = cid;
           if (Op::use_rhs)
-            aw = edges[j];
+            aw = eid;
         }
       }
       out_off[k] = accum;
@@ -133,6 +166,53 @@ void SpMMCmpCsr(const aten::CSRMatrix& csr,
         argx_off[k] = ax;
       if (Op::use_rhs)
         argw_off[k] = aw;
+    }
+  }
+}
+
+template <typename IdType, typename DType, typename Op, typename Cmp>
+void SpMMCmpCoo(const aten::COOMatrix& coo,
+                NDArray ufeat, NDArray efeat,
+                NDArray out, NDArray argu, NDArray arge) {
+  const bool has_idx = !aten::IsNullArray(coo.data);
+  const IdType* row = static_cast<IdType*>(coo.row->data);
+  const IdType* col = static_cast<IdType*>(coo.col->data);
+  const IdType* edges = has_idx? static_cast<IdType*>(coo.data->data) : nullptr;
+  const DType* X = Op::use_lhs? static_cast<DType*>(ufeat->data) : nullptr;
+  const DType* W = Op::use_rhs? static_cast<DType*>(efeat->data) : nullptr;
+  int64_t dim = 1;
+  for (int i = 1; i < out->ndim; ++i)
+    dim *= out->shape[i];
+  DType* O = static_cast<DType*>(out->data);
+  IdType* argX = Op::use_lhs? static_cast<IdType*>(argu->data) : nullptr;
+  IdType* argW = Op::use_rhs? static_cast<IdType*>(arge->data) : nullptr;
+  const int64_t nnz = coo.row->shape[0];
+  // fill zero elements
+#pragma omp parallel for
+  for (IdType i = 0; i < out.Numel(); ++i) {
+    O[i] = Cmp::zero;
+  }
+  // spmm
+#pragma omp parallel for
+  for (IdType i = 0; i < nnz; ++i) {
+    const IdType rid = row[i];
+    const IdType cid = col[i];
+    const IdType eid = has_idx? edges[i] : i;
+    DType* out_off = O + cid * dim;
+    IdType* argx_off = Op::use_lhs? argX + cid * dim : nullptr;
+    IdType* argw_off = Op::use_rhs? argW + cid * dim : nullptr;
+    for (int64_t k = 0; k < dim; ++k) {
+      const DType* lhs_off = Op::use_lhs? X + rid * dim + k : nullptr;
+      const DType* rhs_off = Op::use_rhs? W + eid * dim + k : nullptr;
+      const DType val = Op::Call(lhs_off, rhs_off);
+#pragma omp critical
+      if (Cmp::Call(out_off[k], val)) {
+        out_off[k] = val;
+        if (Op::use_lhs)
+          argx_off[k] = rid;
+        if (Op::use_rhs)
+          argw_off[k] = eid;
+      }
     }
   }
 }

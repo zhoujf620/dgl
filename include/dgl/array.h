@@ -909,6 +909,7 @@ IdArray VecToIdArray(const std::vector<T>& vec,
  *   DeviceSpecificImplementation<XPU>(...);
  * });
  */
+#ifdef DGL_USE_CUDA
 #define ATEN_XPU_SWITCH_CUDA(val, XPU, ...) do {                \
   if ((val) == kDLCPU) {                                        \
     constexpr auto XPU = kDLCPU;                                \
@@ -920,6 +921,9 @@ IdArray VecToIdArray(const std::vector<T>& vec,
     LOG(FATAL) << "Device type: " << (val) << " is not supported.";  \
   }                                                             \
 } while (0)
+#else  // DGL_USE_CUDA
+#define ATEN_XPU_SWITCH_CUDA ATEN_XPU_SWITCH
+#endif  // DGL_USE_CUDA
 
 /*
  * Dispatch according to integral type (either int32 or int64):

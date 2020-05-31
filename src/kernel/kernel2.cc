@@ -41,8 +41,9 @@ void SpMM(const std::string& op, const std::string& reduce,
           std::vector<NDArray> out_aux,
           SparseFormat format) {
   // TODO(minjie): fmt tuning
-  format = SparseFormat::kCSC;
-  if (HasBcast(ufeat, efeat)) {
+  format = SparseFormat::kCOO;
+  if (!aten::IsNullArray(ufeat) && !aten::IsNullArray(efeat)
+      && HasBcast(ufeat, efeat)) {
     const auto& bcast_info = CalcBcastInfo(op, ufeat, efeat);
     ATEN_XPU_SWITCH(graph->Context().device_type, XPU, {
       ATEN_ID_TYPE_SWITCH(graph->DataType(), IdType, {
@@ -89,7 +90,8 @@ void SDDMM(const std::string& op,
            SparseFormat format) {
   // TODO(minjie): fmt tuning
   format = SparseFormat::kCOO;
-  if (HasBcast(ufeat, efeat)) {
+  if (!aten::IsNullArray(ufeat) && !aten::IsNullArray(efeat)
+      && HasBcast(ufeat, efeat)) {
     const auto& bcast_info = CalcBcastInfo(op, ufeat, efeat);
     ATEN_XPU_SWITCH(graph->Context().device_type, XPU, {
       ATEN_ID_TYPE_SWITCH(graph->DataType(), IdType, {

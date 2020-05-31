@@ -85,8 +85,22 @@ void SpMMCoo(const std::string& op, const std::string& reduce,
              NDArray efeat,
              NDArray out,
              std::vector<NDArray> out_aux) {
-  // TODO
-  LOG(FATAL) << "Not implemented";
+  if (reduce == "sum") {
+    SWITCH_OP(op, Op, {
+      cpu::SpMMSumCoo<IdType, DType, Op>(coo, ufeat, efeat, out);
+    });
+  } else if (reduce == "max" || reduce == "min") {
+    SWITCH_OP(op, Op, {
+      if (reduce == "max")
+        cpu::SpMMCmpCoo<IdType, DType, Op, cpu::op::Max<DType>>(
+            coo, ufeat, efeat, out, out_aux[0], out_aux[1]);
+      else
+        cpu::SpMMCmpCoo<IdType, DType, Op, cpu::op::Min<DType>>(
+            coo, ufeat, efeat, out, out_aux[0], out_aux[1]);
+    });
+  } else {
+    LOG(FATAL) << "Unsupported SpMM reducer: " << reduce;
+  }
 }
 
 template void SpMMCoo<kDLCPU, int32_t, float>(
