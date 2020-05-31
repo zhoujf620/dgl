@@ -1531,4 +1531,14 @@ void UnitGraph::Save(dmlc::Stream* fs) const {
   }
 }
 
+UnitGraphPtr UnitGraph::Reverse() const {
+  CSRPtr new_incsr = out_csr_, new_outcsr = in_csr_;
+  COOPtr new_coo = nullptr;
+  if (coo_) {
+    new_coo = COOPtr(new COO(coo_->meta_graph(), aten::COOTranspose(coo_->adj())));
+  }
+  CHECK(restrict_format_ == SparseFormat::kAny);
+  return UnitGraphPtr(new UnitGraph(meta_graph(), new_incsr, new_outcsr, new_coo));
+}
+
 }  // namespace dgl

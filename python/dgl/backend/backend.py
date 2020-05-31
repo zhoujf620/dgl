@@ -1295,6 +1295,7 @@ copy_u_sum = None
 copy_u_max = None
 copy_u_min = None
 copy_u = None
+copy_v = None
 
 u_add_e_sum = None
 u_mul_e_sum = None
