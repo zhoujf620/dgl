@@ -1,10 +1,32 @@
-//#include "./spmm.cuh"
+#include "./spmm.cuh"
+#include "./functor2.cuh"
+#include <minigun/minigun.h>
 #include <dgl/array.h>
 #include "../../runtime/cuda/cuda_common.h"
-#include "../binary_reduce.h"
 
 namespace dgl {
 namespace kernel {
+
+using minigun::advance::RuntimeConfig;
+
+#define SWITCH_OP(op, Op, ...)                                      \
+  do {                                                              \
+    if ((op) == "add") {                                            \
+      typedef dgl::kernel::cuda::binary::Add<DType> Op;             \
+      { __VA_ARGS__ }                                               \
+    } else if ((op) == "mul") {                                     \
+      typedef dgl::kernel::cuda::binary::Mul<DType> Op;             \
+      { __VA_ARGS__ }                                               \
+    } else if ((op) == "copy_u") {                                  \
+      typedef dgl::kernel::cuda::binary::CopyU<DType> Op;           \
+      { __VA_ARGS__ }                                               \
+    } else if ((op) == "copy_e") {                                  \
+      typedef dgl::kernel::cuda::binary::CopyE<DType> Op;           \
+      { __VA_ARGS__ }                                               \
+    } else {                                                        \
+      LOG(FATAL) << "Unsupported SpMM binary operator: " << op;     \
+    }                                                               \
+  } while (0)
 
 template <int XPU, typename IdType, typename DType>
 void SpMMCsr(const std::string& op, const std::string& reduce,
@@ -13,8 +35,24 @@ void SpMMCsr(const std::string& op, const std::string& reduce,
              NDArray efeat,
              NDArray out,
              std::vector<NDArray> out_aux) {
-  // TODO
-  LOG(FATAL) << "Not implemented";
+  if (reduce == "sum") {
+    SWITCH_OP(op, Op, {
+      cuda::SpMMCsr<IdType, DType, Op, cuda::reduce::Sum<IdType, DType> >(
+          csr, ufeat, efeat, out, out_aux[0], out_aux[1]);
+    });
+  } else if (reduce == "max") {
+    SWITCH_OP(op, Op, {
+      cuda::SpMMCsr<IdType, DType, Op, cuda::reduce::Max<IdType, DType> >(
+          csr, ufeat, efeat, out, out_aux[0], out_aux[1]);
+    });
+  } else if (reduce == "min") {
+    SWITCH_OP(op, Op, {
+      cuda::SpMMCsr<IdType, DType, Op, cuda::reduce::Min<IdType, DType> >(
+          csr, ufeat, efeat, out, out_aux[0], out_aux[1]);
+    });
+  } else {
+    LOG(FATAL) << "Not implemented";
+  }
 }
 
 template <int XPU, typename IdType, typename DType>
@@ -24,32 +62,24 @@ void SpMMCoo(const std::string& op, const std::string& reduce,
              NDArray efeat,
              NDArray out,
              std::vector<NDArray> out_aux) {
-  // TODO
-  LOG(FATAL) << "Not implemented";
-}
-
-template <int XPU, typename IdType, typename DType>
-void SpMMBcastCsr(const std::string& op, const std::string& reduce,
-                   const BcastInfo& info,
-             const aten::CSRMatrix& csr,
-             NDArray ufeat,
-             NDArray efeat,
-             NDArray out,
-             std::vector<NDArray> out_aux) {
-  // TODO
-  LOG(FATAL) << "Not implemented";
-}
-
-template <int XPU, typename IdType, typename DType>
-void SpMMBcastCoo(const std::string& op, const std::string& reduce,
-                   const BcastInfo& info,
-             const aten::COOMatrix& coo,
-             NDArray ufeat,
-             NDArray efeat,
-             NDArray out,
-             std::vector<NDArray> out_aux) {
-  // TODO
-  LOG(FATAL) << "Not implemented";
+  if (reduce == "sum") {
+    SWITCH_OP(op, Op, {
+      cuda::SpMMCoo<IdType, DType, Op, cuda::reduce::Sum<IdType, DType, true> > (
+          coo, ufeat, efeat, out, out_aux[0], out_aux[1]);
+    });
+  } else if (reduce == "max") {
+    SWITCH_OP(op, Op, {
+      cuda::SpMMCoo<IdType, DType, Op, cuda::reduce::Max<IdType, DType, true> > (
+          coo, ufeat, efeat, out, out_aux[0], out_aux[1]);
+    });
+  }  else if (reduce == "min") {
+    SWITCH_OP(op, Op, {
+      cuda::SpMMCoo<IdType, DType, Op, cuda::reduce::Min<IdType, DType, true> > (
+          coo, ufeat, efeat, out, out_aux[0], out_aux[1]);
+    });
+  } else {
+    LOG(FATAL) << "Not implemented";
+  }
 }
 
 template void SpMMCsr<kDLGPU, int32_t, float>(
@@ -77,48 +107,6 @@ template void SpMMCoo<kDLGPU, int32_t, double>(
 template void SpMMCoo<kDLGPU, int64_t, double>(
     const std::string& op, const std::string& reduce, const aten::COOMatrix& coo,
     NDArray ufeat, NDArray efeat, NDArray out, std::vector<NDArray> out_aux);
-
-template void SpMMBcastCsr<kDLGPU, int32_t, float>(
-    const std::string& op, const std::string& reduce,
-    const aten::CSRMatrix& csr,
-    NDArray ufeat, NDArray efeat, NDArray out, std::vector<NDArray> out_aux);
-template void SpMMBcastCsr<kDLGPU, int64_t, float>(
-    const std::string& op, const std::string& reduce,
-    const BcastInfo& info,
-    const aten::CSRMatrix& csr,
-    NDArray ufeat, NDArray efeat, NDArray out, std::vector<NDArray> out_aux);
-template void SpMMBcastCsr<kDLGPU, int32_t, double>(
-    const std::string& op, const std::string& reduce,
-    const BcastInfo& info,
-    const aten::CSRMatrix& csr,
-    NDArray ufeat, NDArray efeat, NDArray out, std::vector<NDArray> out_aux);
-template void SpMMBcastCsr<kDLGPU, int64_t, double>(
-    const std::string& op, const std::string& reduce,
-    const BcastInfo& info,
-    const aten::CSRMatrix& csr,
-    NDArray ufeat, NDArray efeat, NDArray out, std::vector<NDArray> out_aux);
-
-template void SpMMBcastCoo<kDLGPU, int32_t, float>(
-    const std::string& op, const std::string& reduce,
-    const BcastInfo& info,
-    const aten::COOMatrix& coo,
-    NDArray ufeat, NDArray efeat, NDArray out, std::vector<NDArray> out_aux);
-template void SpMMBcastCoo<kDLGPU, int64_t, float>(
-    const std::string& op, const std::string& reduce,
-    const BcastInfo& info,
-    const aten::COOMatrix& coo,
-    NDArray ufeat, NDArray efeat, NDArray out, std::vector<NDArray> out_aux);
-template void SpMMBcastCoo<kDLGPU, int32_t, double>(
-    const std::string& op, const std::string& reduce,
-    const BcastInfo& info,
-    const aten::COOMatrix& coo,
-    NDArray ufeat, NDArray efeat, NDArray out, std::vector<NDArray> out_aux);
-template void SpMMBcastCoo<kDLGPU, int64_t, double>(
-    const std::string& op, const std::string& reduce,
-    const BcastInfo& info,
-    const aten::COOMatrix& coo,
-    NDArray ufeat, NDArray efeat, NDArray out, std::vector<NDArray> out_aux);
-
 
 namespace cusparse {
 
@@ -248,6 +236,7 @@ void CusparseCsrmm2(
 
 }  // namespace cusparse
 
+/*
 template <int32_t, float>
 void SpMMSumCsr(const aten::CSRMatrix& csr,
                 NDArray ufeat, NDArray efeat,
@@ -275,7 +264,10 @@ void SpMMSumCsr(const aten::CSRMatrix& csr,
 template <typename IdType, typename DType, typename Op>
 void SpMMSumCsr(const aten::CSRMatrix& csr,
                 NDArray ufeat, NDArray efeat,
-                NDArray out) {}
+                NDArray out) {
+  
+} 
+*/
 
 
 }  // namespace kernel

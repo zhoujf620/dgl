@@ -63,7 +63,7 @@ void SpMM(const std::string& op, const std::string& reduce,
       });
     });
   } else {
-    ATEN_XPU_SWITCH(graph->Context().device_type, XPU, {
+    ATEN_XPU_SWITCH_CUDA(graph->Context().device_type, XPU, {
       ATEN_ID_TYPE_SWITCH(graph->DataType(), IdType, {
         ATEN_FLOAT_TYPE_SWITCH(out->dtype, DType, "Feature data", {
           if (format == SparseFormat::kCSR) {
@@ -111,7 +111,7 @@ void SDDMM(const std::string& op,
       });
     });
   } else {
-    ATEN_XPU_SWITCH(graph->Context().device_type, XPU, {
+    ATEN_XPU_SWITCH_CUDA(graph->Context().device_type, XPU, {
       ATEN_ID_TYPE_SWITCH(graph->DataType(), IdType, {
         ATEN_FLOAT_TYPE_SWITCH(out->dtype, DType, "Feature data", {
           if (format == SparseFormat::kCSR) {
