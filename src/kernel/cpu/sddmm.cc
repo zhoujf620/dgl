@@ -11,6 +11,11 @@ void SDDMMCsr(const std::string& op,
               NDArray vfeat,
               NDArray out,
               std::vector<NDArray> out_aux) {
+  if (!aten::IsNullArray(ufeat))
+    CHECK_EQ(ufeat->shape[0], csr.num_rows);
+  if (!aten::IsNullArray(vfeat))
+    CHECK_EQ(vfeat->shape[0], csr.num_cols);
+  CHECK_EQ(out->shape[0], csr.indices->shape[0]);
   if (op == "dot") {
     cpu::SDDMMDotCsr<IdType, DType>(csr, ufeat, vfeat, out);
   } else {
@@ -40,6 +45,11 @@ void SDDMMCoo(const std::string& op,
               NDArray vfeat,
               NDArray out,
               std::vector<NDArray> out_aux) {
+  if (!aten::IsNullArray(ufeat))
+    CHECK_EQ(ufeat->shape[0], coo.num_rows);
+  if (!aten::IsNullArray(vfeat))
+    CHECK_EQ(vfeat->shape[0], coo.num_cols);
+  CHECK_EQ(out->shape[0], coo.row->shape[0]);
   if (op == "dot") {
     cpu::SDDMMDotCoo<IdType, DType>(coo, ufeat, vfeat, out);
   } else {
@@ -70,6 +80,11 @@ void SDDMMBcastCsr(const std::string& op,
                    NDArray vfeat,
                    NDArray out,
                    std::vector<NDArray> out_aux) {
+  if (!aten::IsNullArray(ufeat))
+    CHECK_EQ(ufeat->shape[0], csr.num_rows);
+  if (!aten::IsNullArray(vfeat))
+    CHECK_EQ(vfeat->shape[0], csr.num_cols);
+  CHECK_EQ(out->shape[0], csr.indices->shape[0]);
   SWITCH_OP(op, Op, {
     cpu::SDDMMBcastCsr<IdType, DType, Op>(info, csr, ufeat, vfeat, out);
   });
@@ -96,6 +111,11 @@ void SDDMMBcastCoo(const std::string& op,
                    NDArray vfeat,
                    NDArray out,
                    std::vector<NDArray> out_aux) {
+  if (!aten::IsNullArray(ufeat))
+    CHECK_EQ(ufeat->shape[0], coo.num_rows);
+  if (!aten::IsNullArray(vfeat))
+    CHECK_EQ(vfeat->shape[0], coo.num_cols);
+  CHECK_EQ(out->shape[0], coo.row->shape[0]);
   SWITCH_OP(op, Op, {
     cpu::SDDMMBcastCoo<IdType, DType, Op>(info, coo, ufeat, vfeat, out);
   });
