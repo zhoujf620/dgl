@@ -59,9 +59,10 @@ template <typename IdType, typename DType, typename Op>
 void SpMMSumCsr(const aten::CSRMatrix& csr,
                 NDArray ufeat, NDArray efeat,
                 NDArray out) {
+  const bool has_idx = !aten::IsNullArray(csr.data);
   const IdType* indptr = static_cast<IdType*>(csr.indptr->data);
   const IdType* indices = static_cast<IdType*>(csr.indices->data);
-  const IdType* edges = Op::use_rhs ? static_cast<IdType*>(csr.data->data) : nullptr;
+  const IdType* edges = has_idx ? static_cast<IdType*>(csr.data->data) : nullptr;
   const DType* X = Op::use_lhs? static_cast<DType*>(ufeat->data) : nullptr;
   const DType* W = Op::use_rhs? static_cast<DType*>(efeat->data) : nullptr;
   const int64_t dim = out->shape[1];
@@ -74,8 +75,9 @@ void SpMMSumCsr(const aten::CSRMatrix& csr,
       DType accum = 0;
       for (IdType j = row_start; j < row_end; ++j) {
         const IdType cid = indices[j];
+        const IdType eid = has_idx? edges[j] : j;
         const DType* lhs_off = Op::use_lhs? X + cid * dim + k : nullptr;
-        const DType* rhs_off = Op::use_rhs? W + edges[j] * dim + k : nullptr;
+        const DType* rhs_off = Op::use_rhs? W + eid * dim + k : nullptr;
         accum += Op::Call(lhs_off, rhs_off);
       }
       out_off[k] = accum;
@@ -88,9 +90,10 @@ template <typename IdType, typename DType, typename Op, typename Cmp>
 void SpMMCmpCsr(const aten::CSRMatrix& csr,
                 NDArray ufeat, NDArray efeat,
                 NDArray out, NDArray argu, NDArray arge) {
+  const bool has_idx = !aten::IsNullArray(csr.data);
   const IdType* indptr = static_cast<IdType*>(csr.indptr->data);
   const IdType* indices = static_cast<IdType*>(csr.indices->data);
-  const IdType* edges = Op::use_rhs ? static_cast<IdType*>(csr.data->data) : nullptr;
+  const IdType* edges = has_idx ? static_cast<IdType*>(csr.data->data) : nullptr;
   const DType* X = Op::use_lhs? static_cast<DType*>(ufeat->data) : nullptr;
   const DType* W = Op::use_rhs? static_cast<DType*>(efeat->data) : nullptr;
   const int64_t dim = out->shape[1];
@@ -108,8 +111,9 @@ void SpMMCmpCsr(const aten::CSRMatrix& csr,
       IdType ax = 0, aw = 0;
       for (IdType j = row_start; j < row_end; ++j) {
         const IdType cid = indices[j];
+        const IdType eid = has_idx? edges[j] : j;
         const DType* lhs_off = Op::use_lhs? X + cid * dim + k : nullptr;
-        const DType* rhs_off = Op::use_rhs? W + edges[j] * dim + k : nullptr;
+        const DType* rhs_off = Op::use_rhs? W + eid * dim + k : nullptr;
         const DType val = Op::Call(lhs_off, rhs_off);
         if (Cmp::Call(accum, val)) {
           accum = val;

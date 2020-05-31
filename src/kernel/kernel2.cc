@@ -40,11 +40,11 @@ void SpMM(const std::string& op, const std::string& reduce,
           std::vector<NDArray> out_aux,
           SparseFormat format) {
   // TODO(minjie): fmt tuning
-  format = SparseFormat::kCSR;
+  format = SparseFormat::kCSC;
   ATEN_XPU_SWITCH(graph->Context().device_type, XPU, {
     ATEN_ID_TYPE_SWITCH(graph->DataType(), IdType, {
       ATEN_FLOAT_TYPE_SWITCH(ufeat->dtype, DType, "Feature data", {
-        if (format == SparseFormat::kCSR) {
+        if (format == SparseFormat::kCSC) {
           SpMMCsr<XPU, IdType, DType>(op, reduce, graph->GetCSCMatrix(0),
                                       ufeat, efeat, out, out_aux);
         } else if (format == SparseFormat::kCOO) {

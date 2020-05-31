@@ -58,7 +58,7 @@ class UMulESum(th.autograd.Function):
             dX = u_mul_e_sum(g.reverse(), dZ, Y)
             dX = _reduce_grad(dX, X.shape)
         if ctx.needs_input_grad[2]:
-            dY = u_mul_v(g, X, Y)
+            dY = u_mul_v(g, X, dZ)
             dY = _reduce_grad(dY, Y.shape)
         return None, dX, dY
 
@@ -115,16 +115,14 @@ class UMulEMax(th.autograd.Function):
         if ctx.needs_input_grad[1] or ctx.needs_input_grad[2]:
             argX = argX.long()
             argY = argY.long()
-        assert False
         if ctx.needs_input_grad[1]:
-            dX = th.zeros_like(X)
-            deltaX = _reduce_grad(Y[argY] * dZ, X.shape)
-            view_shape = (argX.shape[0],) + (1,) * (deltaX.ndim - 1)
-            idx = argX.view(*view_shape).expand(*deltaX.shape)
-            dX.scatter_add_(0, idx, deltaX)
+            dX = th.zeros((X.shape[0],) + dZ.shape[1:], dtype=X.dtype, device=X.device)
+            dX.scatter_add_(0, argX, Y.gather(0, argY) * dZ)
+            dX = _reduce_grad(dX, X.shape)
         if ctx.needs_input_grad[2]:
-            dY = th.zeros_like(Y)
-            dY[argY] = _reduce_grad(X[argX] * dZ, Y.shape)
+            dY = th.zeros((Y.shape[0],) + dZ.shape[1:], dtype=Y.dtype, device=Y.device)
+            dY.scatter_(0, argY, X.gather(0, argX) * dZ)
+            dY = _reduce_grad(dY, Y.shape)
         return None, dX, dY
 
 class UMulEMin(th.autograd.Function):
@@ -173,14 +171,13 @@ class UAddEMax(th.autograd.Function):
         X, Y, argX, argY = ctx.saved_tensors
         dX, dY = None, None
         if ctx.needs_input_grad[1]:
-            dX = th.zeros_like(X)
-            deltaX = _reduce_grad(dZ, X.shape)
-            view_shape = (argX.shape[0],) + (1,) * (deltaX.ndim - 1)
-            idx = argX.view(*view_shape).expand(*deltaX.shape).long()
-            dX.scatter_add_(0, idx, deltaX)
+            dX = th.zeros((X.shape[0],) + dZ.shape[1:], dtype=X.dtype, device=X.device)
+            dX.scatter_add_(0, argX.long(), dZ)
+            dX = _reduce_grad(dX, X.shape)
         if ctx.needs_input_grad[2]:
-            dY = th.zeros_like(Y)
-            dY[argY.long()] = _reduce_grad(dZ, Y.shape)
+            dY = th.zeros((Y.shape[0],) + dZ.shape[1:], dtype=Y.dtype, device=Y.device)
+            dY.scatter_(0, argY.long(), dZ)
+            dY = _reduce_grad(dY, Y.shape)
         return None, dX, dY
 
 class UAddEMin(th.autograd.Function):
@@ -255,8 +252,8 @@ class CopyEMax(th.autograd.Function):
         Y, argY = ctx.saved_tensors
         dY = None
         if ctx.needs_input_grad[1]:
-            dY = th.zeros_like(Y)
-            dY[argY.long()] = dZ
+            dY = th.zeros((Y.shape[0],) + dZ.shape[1:], dtype=Y.dtype, device=Y.device)
+            dY.scatter_(0, argY.long(), dZ)
         return None, dY
 
 class CopyEMin(th.autograd.Function):
@@ -308,10 +305,8 @@ class CopyUMax(th.autograd.Function):
         X, argX = ctx.saved_tensors
         dX = None
         if ctx.needs_input_grad[1]:
-            dX = th.zeros_like(X)
-            view_shape = (argX.shape[0],) + (1,) * (dZ.ndim - 1)
-            idx = argX.view(*view_shape).expand(*dZ.shape).long()
-            dX.scatter_add_(0, idx, dZ)
+            dX = th.zeros((X.shape[0],) + dZ.shape[1:], dtype=X.dtype, device=X.device)
+            dX.scatter_add_(0, argX.long(), dZ)
         return None, dX
 
 class CopyUMin(th.autograd.Function):
