@@ -1,4 +1,4 @@
-//#include "./spmm.cuh"
+#include "./spmm.h"
 #include <dgl/array.h>
 
 namespace dgl {
@@ -11,8 +11,22 @@ void SpMMCsr(const std::string& op, const std::string& reduce,
              NDArray efeat,
              NDArray out,
              std::vector<NDArray> out_aux) {
-  // TODO
-  LOG(FATAL) << "Not implemented";
+  if (reduce == "sum") {
+    SWITCH_OP(op, Op, {
+      cpu::SpMMSumCsr<IdType, DType, Op>(csr, ufeat, efeat, out);
+    });
+  } else if (reduce == "max" || reduce == "min") {
+    SWITCH_OP(op, Op, {
+      if (reduce == "max")
+        cpu::SpMMCmpCsr<IdType, DType, Op, cpu::op::Max<DType>>(
+            csr, ufeat, efeat, out, out_aux[0], out_aux[1]);
+      else
+        cpu::SpMMCmpCsr<IdType, DType, Op, cpu::op::Min<DType>>(
+            csr, ufeat, efeat, out, out_aux[0], out_aux[1]);
+    });
+  } else {
+    LOG(FATAL) << "Unsupported SpMM reducer: " << reduce;
+  }
 }
 
 template <int XPU, typename IdType, typename DType>

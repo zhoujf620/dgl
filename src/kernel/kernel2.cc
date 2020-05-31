@@ -45,7 +45,7 @@ void SpMM(const std::string& op, const std::string& reduce,
     ATEN_ID_TYPE_SWITCH(graph->DataType(), IdType, {
       ATEN_FLOAT_TYPE_SWITCH(ufeat->dtype, DType, "Feature data", {
         if (format == SparseFormat::kCSR) {
-          SpMMCsr<XPU, IdType, DType>(op, reduce, graph->GetCSRMatrix(0),
+          SpMMCsr<XPU, IdType, DType>(op, reduce, graph->GetCSCMatrix(0),
                                       ufeat, efeat, out, out_aux);
         } else if (format == SparseFormat::kCOO) {
           SpMMCoo<XPU, IdType, DType>(op, reduce, graph->GetCOOMatrix(0),
@@ -71,7 +71,7 @@ void SDDMM(const std::string& op,
     ATEN_ID_TYPE_SWITCH(graph->DataType(), IdType, {
       ATEN_FLOAT_TYPE_SWITCH(ufeat->dtype, DType, "Feature data", {
         if (format == SparseFormat::kCSR) {
-          SDDMMCsr<XPU, IdType, DType>(op, graph->GetCSRMatrix(0),
+          SDDMMCsr<XPU, IdType, DType>(op, graph->GetCSCMatrix(0),
                                        ufeat, efeat, out, out_aux);
         } else if (format == SparseFormat::kCOO) {
           SDDMMCoo<XPU, IdType, DType>(op, graph->GetCOOMatrix(0),
@@ -112,7 +112,8 @@ DGL_REGISTER_GLOBAL("kernel2._CAPI_DGLKernelCopyUMax")
     NDArray Z = args[2];
     NDArray argX = args[3];
     CheckCtx(graph->Context(), {X, Z, argX}, {"U_data", "Out", "U_index"});
-    SpMM("copy_u", "max", graph.sptr(), X, aten::NullArray(), Z, {argX});
+    SpMM("copy_u", "max", graph.sptr(), X, aten::NullArray(),
+         Z, {argX, aten::NullArray()});
   });
 
 DGL_REGISTER_GLOBAL("kernel2._CAPI_DGLKernelCopyUMin")
@@ -122,7 +123,8 @@ DGL_REGISTER_GLOBAL("kernel2._CAPI_DGLKernelCopyUMin")
     NDArray Z = args[2];
     NDArray argX = args[3];
     CheckCtx(graph->Context(), {X, Z, argX}, {"U_data", "Out", "U_index"});
-    SpMM("copy_u", "min", graph.sptr(), X, aten::NullArray(), Z, {argX});
+    SpMM("copy_u", "min", graph.sptr(), X, aten::NullArray(),
+         Z, {argX, aten::NullArray()});
   });
 
 DGL_REGISTER_GLOBAL("kernel2._CAPI_DGLKernelCopyESum")
@@ -141,7 +143,8 @@ DGL_REGISTER_GLOBAL("kernel2._CAPI_DGLKernelCopyEMax")
     NDArray Z = args[2];
     NDArray argY = args[3];
     CheckCtx(graph->Context(), {Y, Z, argY}, {"E_data", "Out", "E_index"});
-    SpMM("copy_e", "max", graph.sptr(), aten::NullArray(), Y, Z, {argY});
+    SpMM("copy_e", "max", graph.sptr(), aten::NullArray(), Y,
+         Z, {aten::NullArray(), argY});
   });
 
 DGL_REGISTER_GLOBAL("kernel2._CAPI_DGLKernelCopyEMin")
@@ -151,7 +154,8 @@ DGL_REGISTER_GLOBAL("kernel2._CAPI_DGLKernelCopyEMin")
     NDArray Z = args[2];
     NDArray argY = args[3];
     CheckCtx(graph->Context(), {Y, Z, argY}, {"E_data", "Out", "E_index"});
-    SpMM("copy_e", "min", graph.sptr(), aten::NullArray(), Y, Z, {argY});
+    SpMM("copy_e", "min", graph.sptr(), aten::NullArray(), Y,
+         Z, {aten::NullArray(), argY});
   });
 
 DGL_REGISTER_GLOBAL("kernel2._CAPI_DGLKernelCopyU")

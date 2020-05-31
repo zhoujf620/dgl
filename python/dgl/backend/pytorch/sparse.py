@@ -95,8 +95,8 @@ class UMulEMax(th.autograd.Function):
         bshape = K.infer_broadcast_shape(X.shape[1:], Y.shape[1:])
         dtid = g.number_of_ntypes() - 1
         Z = th.zeros((g.number_of_nodes(dtid),) + bshape, device=X.device, dtype=X.dtype)
-        argX = th.zeros((Z.size(0),), device=X.device, dtype=getattr(th, g.dtype))
-        argY = th.zeros((Z.size(0),), device=X.device, dtype=getattr(th, g.dtype))
+        argX = th.zeros(Z.shape, device=X.device, dtype=getattr(th, g.dtype))
+        argY = th.zeros(Z.shape, device=X.device, dtype=getattr(th, g.dtype))
         K.u_op_e_max('mul', g,
                      to_dgl_nd(X),
                      to_dgl_nd(Y),
@@ -115,6 +115,7 @@ class UMulEMax(th.autograd.Function):
         if ctx.needs_input_grad[1] or ctx.needs_input_grad[2]:
             argX = argX.long()
             argY = argY.long()
+        assert False
         if ctx.needs_input_grad[1]:
             dX = th.zeros_like(X)
             deltaX = _reduce_grad(Y[argY] * dZ, X.shape)
@@ -132,8 +133,8 @@ class UMulEMin(th.autograd.Function):
         bshape = K.infer_broadcast_shape(X.shape[1:], Y.shape[1:])
         dtid = g.number_of_ntypes() - 1
         Z = th.zeros((g.number_of_nodes(dtid),) + bshape, device=X.device, dtype=X.dtype)
-        argX = th.zeros((Z.size(0),), device=X.device, dtype=getattr(th, g.dtype))
-        argY = th.zeros((Z.size(0),), device=X.device, dtype=getattr(th, g.dtype))
+        argX = th.zeros(Z.shape, device=X.device, dtype=getattr(th, g.dtype))
+        argY = th.zeros(Z.shape, device=X.device, dtype=getattr(th, g.dtype))
         K.u_op_e_min('mul', g,
                      to_dgl_nd(X),
                      to_dgl_nd(Y),
@@ -154,8 +155,8 @@ class UAddEMax(th.autograd.Function):
         bshape = K.infer_broadcast_shape(X.shape[1:], Y.shape[1:])
         dtid = g.number_of_ntypes() - 1
         Z = th.zeros((g.number_of_nodes(dtid),) + bshape, device=X.device, dtype=X.dtype)
-        argX = th.zeros((Z.size(0),), device=X.device, dtype=getattr(th, g.dtype))
-        argY = th.zeros((Z.size(0),), device=X.device, dtype=getattr(th, g.dtype))
+        argX = th.zeros(Z.shape, device=X.device, dtype=getattr(th, g.dtype))
+        argY = th.zeros(Z.shape, device=X.device, dtype=getattr(th, g.dtype))
         K.u_op_e_max('add', g,
                      to_dgl_nd(X),
                      to_dgl_nd(Y),
@@ -188,8 +189,8 @@ class UAddEMin(th.autograd.Function):
         bshape = K.infer_broadcast_shape(X.shape[1:], Y.shape[1:])
         dtid = g.number_of_ntypes() - 1
         Z = th.zeros((g.number_of_nodes(dtid),) + bshape, device=X.device, dtype=X.dtype)
-        argX = th.zeros((Z.size(0),), device=X.device, dtype=getattr(th, g.dtype))
-        argY = th.zeros((Z.size(0),), device=X.device, dtype=getattr(th, g.dtype))
+        argX = th.zeros(Z.shape, device=X.device, dtype=getattr(th, g.dtype))
+        argY = th.zeros(Z.shape, device=X.device, dtype=getattr(th, g.dtype))
         K.u_op_e_min('add', g,
                      to_dgl_nd(X),
                      to_dgl_nd(Y),
@@ -242,7 +243,7 @@ class CopyEMax(th.autograd.Function):
     def forward(ctx, g, Y):
         dtid = g.number_of_ntypes() - 1
         Z = th.zeros((g.number_of_nodes(dtid), ) + Y.shape[1:], device=Y.device, dtype=Y.dtype)
-        argY = th.zeros((Z.size(0),), device=Y.device, dtype=getattr(th, g.dtype))
+        argY = th.zeros(Z.shape, device=Y.device, dtype=getattr(th, g.dtype))
         K.copy_e_max(g, to_dgl_nd(Y), to_dgl_nd(Z), to_dgl_nd(argY))
         ctx.backward_cache = g
         ctx.save_for_backward(Y, argY)
@@ -263,7 +264,7 @@ class CopyEMin(th.autograd.Function):
     def forward(ctx, g, Y):
         dtid = g.number_of_ntypes() - 1
         Z = th.zeros((g.number_of_nodes(dtid), ) + Y.shape[1:], device=Y.device, dtype=Y.dtype)
-        argY = th.zeros((Z.size(0),), device=Y.device, dtype=getattr(th, g.dtype))
+        argY = th.zeros(Z.shape, device=Y.device, dtype=getattr(th, g.dtype))
         K.copy_e_min(g, to_dgl_nd(Y), to_dgl_nd(Z), to_dgl_nd(argY))
         ctx.backward_cache = g
         ctx.save_for_backward(Y, argY)
@@ -295,7 +296,7 @@ class CopyUMax(th.autograd.Function):
     def forward(ctx, g, X):
         dtid = g.number_of_ntypes() - 1
         Z = th.zeros((g.number_of_nodes(dtid), ) + X.shape[1:], device=X.device, dtype=X.dtype)
-        argX = th.zeros((Z.size(0),), device=X.device, dtype=getattr(th, g.dtype))
+        argX = th.zeros(Z.shape, device=X.device, dtype=getattr(th, g.dtype))
         K.copy_u_max(g, to_dgl_nd(X), to_dgl_nd(Z), to_dgl_nd(argX))
         ctx.backward_cache = g
         ctx.save_for_backward(X, argX)
@@ -318,7 +319,7 @@ class CopyUMin(th.autograd.Function):
     def forward(ctx, g, X):
         dtid = g.number_of_ntypes() - 1
         Z = th.zeros((g.number_of_nodes(dtid), ) + X.shape[1:], device=X.device, dtype=X.dtype)
-        argX = th.zeros((Z.size(0),), device=X.device, dtype=getattr(th, g.dtype))
+        argX = th.zeros(Z.shape, device=X.device, dtype=getattr(th, g.dtype))
         K.copy_u_min(g, to_dgl_nd(X), to_dgl_nd(Z), to_dgl_nd(argX))
         ctx.backward_cache = g
         ctx.save_for_backward(X, argX)
