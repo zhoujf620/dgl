@@ -41,14 +41,14 @@ void SpMM(const std::string& op, const std::string& reduce,
           std::vector<NDArray> out_aux,
           SparseFormat format) {
   // TODO(minjie): fmt tuning
-  format = SparseFormat::kCOO;
+  format = SparseFormat::kCSR;
   if (!aten::IsNullArray(ufeat) && !aten::IsNullArray(efeat)
       && HasBcast(ufeat, efeat)) {
     const auto& bcast_info = CalcBcastInfo(op, ufeat, efeat);
     ATEN_XPU_SWITCH(graph->Context().device_type, XPU, {
       ATEN_ID_TYPE_SWITCH(graph->DataType(), IdType, {
         ATEN_FLOAT_TYPE_SWITCH(out->dtype, DType, "Feature data", {
-          if (format == SparseFormat::kCSC) {
+          if (format == SparseFormat::kCSR) {
             SpMMBcastCsr<XPU, IdType, DType>(
                 op, reduce, bcast_info, graph->GetCSCMatrix(0),
                 ufeat, efeat, out, out_aux);
@@ -66,7 +66,7 @@ void SpMM(const std::string& op, const std::string& reduce,
     ATEN_XPU_SWITCH(graph->Context().device_type, XPU, {
       ATEN_ID_TYPE_SWITCH(graph->DataType(), IdType, {
         ATEN_FLOAT_TYPE_SWITCH(out->dtype, DType, "Feature data", {
-          if (format == SparseFormat::kCSC) {
+          if (format == SparseFormat::kCSR) {
             SpMMCsr<XPU, IdType, DType>(op, reduce, graph->GetCSCMatrix(0),
                                         ufeat, efeat, out, out_aux);
           } else if (format == SparseFormat::kCOO) {
@@ -98,7 +98,7 @@ void SDDMM(const std::string& op,
         ATEN_FLOAT_TYPE_SWITCH(out->dtype, DType, "Feature data", {
           if (format == SparseFormat::kCSR) {
             SDDMMBcastCsr<XPU, IdType, DType>(
-                op, bcast_info, graph->GetCSCMatrix(0),
+                op, bcast_info, graph->GetCSRMatrix(0),
                 ufeat, efeat, out, out_aux);
           } else if (format == SparseFormat::kCOO) {
             SDDMMBcastCoo<XPU, IdType, DType>(
@@ -115,7 +115,7 @@ void SDDMM(const std::string& op,
       ATEN_ID_TYPE_SWITCH(graph->DataType(), IdType, {
         ATEN_FLOAT_TYPE_SWITCH(out->dtype, DType, "Feature data", {
           if (format == SparseFormat::kCSR) {
-            SDDMMCsr<XPU, IdType, DType>(op, graph->GetCSCMatrix(0),
+            SDDMMCsr<XPU, IdType, DType>(op, graph->GetCSRMatrix(0),
                                          ufeat, efeat, out, out_aux);
           } else if (format == SparseFormat::kCOO) {
             SDDMMCoo<XPU, IdType, DType>(op, graph->GetCOOMatrix(0),

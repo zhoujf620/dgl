@@ -14,7 +14,7 @@ void SDDMMCsr(const aten::CSRMatrix& csr,
   const bool has_idx = !aten::IsNullArray(csr.data);
   const IdType* indptr = static_cast<IdType*>(csr.indptr->data);
   const IdType* indices = static_cast<IdType*>(csr.indices->data);
-  const IdType* edges = has_idx? nullptr : static_cast<IdType*>(csr.data->data);
+  const IdType* edges = has_idx?  static_cast<IdType*>(csr.data->data) : nullptr;
   const DType* X = Op::use_lhs? static_cast<DType*>(ufeat->data) : nullptr;
   const DType* Y = Op::use_rhs? static_cast<DType*>(vfeat->data) : nullptr;
   int64_t dim = 1;
@@ -26,7 +26,8 @@ void SDDMMCsr(const aten::CSRMatrix& csr,
     const IdType row_start = indptr[rid], row_end = indptr[rid + 1];
     for (IdType j = row_start; j < row_end; ++j) {
       const IdType cid = indices[j];
-      DType* out_off = O + (has_idx? edges[j] : j) * dim;
+      const IdType eid = has_idx? edges[j] : j;
+      DType* out_off = O + eid * dim;
       for (int64_t k = 0; k < dim; ++k) {
         const DType* lhs_off = Op::use_lhs? X + rid * dim + k : nullptr;
         const DType* rhs_off = Op::use_rhs? Y + cid * dim + k : nullptr;
