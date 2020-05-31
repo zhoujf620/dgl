@@ -33,7 +33,7 @@ inline void CheckCtx(
 }  // namespace
 
 void SpMM(const std::string& op, const std::string& reduce,
-          const UnitGraph* graph,
+          HeteroGraphPtr graph,
           NDArray ufeat,
           NDArray efeat,
           NDArray out,
@@ -59,7 +59,7 @@ void SpMM(const std::string& op, const std::string& reduce,
 }
 
 void SDDMM(const std::string& op,
-           const UnitGraph* graph,
+           HeteroGraphPtr graph,
            NDArray ufeat,
            NDArray efeat,
            NDArray out,
@@ -93,6 +93,7 @@ DGL_REGISTER_GLOBAL("kernel2._CAPI_DGLKernelUOpESum")
     NDArray Z = args[4];
     CheckCtx(graph->Context(), {X, Y, Z}, {"U_data", "E_data", "Out"});
     CHECK_EQ(graph->NumEdgeTypes(), 1);
+    SpMM(op, "sum", graph.sptr(), X, Y, Z, {});
   });
 
 DGL_REGISTER_GLOBAL("kernel2._CAPI_DGLKernelCopyUSum")
@@ -101,6 +102,7 @@ DGL_REGISTER_GLOBAL("kernel2._CAPI_DGLKernelCopyUSum")
     NDArray X = args[1];
     NDArray Z = args[2];
     CheckCtx(graph->Context(), {X, Z}, {"U_data", "Out"});
+    SpMM("copy_u", "sum", graph.sptr(), X, aten::NullArray(), Z, {});
   });
 
 DGL_REGISTER_GLOBAL("kernel2._CAPI_DGLKernelCopyUMax")
@@ -110,6 +112,7 @@ DGL_REGISTER_GLOBAL("kernel2._CAPI_DGLKernelCopyUMax")
     NDArray Z = args[2];
     NDArray argX = args[3];
     CheckCtx(graph->Context(), {X, Z, argX}, {"U_data", "Out", "U_index"});
+    SpMM("copy_u", "max", graph.sptr(), X, aten::NullArray(), Z, {argX});
   });
 
 DGL_REGISTER_GLOBAL("kernel2._CAPI_DGLKernelCopyUMin")
@@ -119,6 +122,7 @@ DGL_REGISTER_GLOBAL("kernel2._CAPI_DGLKernelCopyUMin")
     NDArray Z = args[2];
     NDArray argX = args[3];
     CheckCtx(graph->Context(), {X, Z, argX}, {"U_data", "Out", "U_index"});
+    SpMM("copy_u", "min", graph.sptr(), X, aten::NullArray(), Z, {argX});
   });
 
 DGL_REGISTER_GLOBAL("kernel2._CAPI_DGLKernelCopyESum")
@@ -127,6 +131,7 @@ DGL_REGISTER_GLOBAL("kernel2._CAPI_DGLKernelCopyESum")
     NDArray Y = args[1];
     NDArray Z = args[2];
     CheckCtx(graph->Context(), {Y, Z}, {"E_data", "Out"});
+    SpMM("copy_e", "sum", graph.sptr(), aten::NullArray(), Y, Z, {});
   });
 
 DGL_REGISTER_GLOBAL("kernel2._CAPI_DGLKernelCopyEMax")
@@ -136,6 +141,7 @@ DGL_REGISTER_GLOBAL("kernel2._CAPI_DGLKernelCopyEMax")
     NDArray Z = args[2];
     NDArray argY = args[3];
     CheckCtx(graph->Context(), {Y, Z, argY}, {"E_data", "Out", "E_index"});
+    SpMM("copy_e", "max", graph.sptr(), aten::NullArray(), Y, Z, {argY});
   });
 
 DGL_REGISTER_GLOBAL("kernel2._CAPI_DGLKernelCopyEMin")
@@ -145,6 +151,7 @@ DGL_REGISTER_GLOBAL("kernel2._CAPI_DGLKernelCopyEMin")
     NDArray Z = args[2];
     NDArray argY = args[3];
     CheckCtx(graph->Context(), {Y, Z, argY}, {"E_data", "Out", "E_index"});
+    SpMM("copy_e", "min", graph.sptr(), aten::NullArray(), Y, Z, {argY});
   });
 
 DGL_REGISTER_GLOBAL("kernel2._CAPI_DGLKernelCopyU")
@@ -153,6 +160,7 @@ DGL_REGISTER_GLOBAL("kernel2._CAPI_DGLKernelCopyU")
     NDArray X = args[1];
     NDArray Z = args[2];
     CheckCtx(graph->Context(), {X, Z}, {"U_data", "Out"});
+    SDDMM("copy_u", graph.sptr(), X, aten::NullArray(), Z, {});
   });
 
 DGL_REGISTER_GLOBAL("kernel2._CAPI_DGLKernelUOpEMax")
@@ -166,6 +174,7 @@ DGL_REGISTER_GLOBAL("kernel2._CAPI_DGLKernelUOpEMax")
     NDArray argY = args[6];
     CheckCtx(graph->Context(), {X, Y, Z, argX, argY},
         {"U_data", "E_data", "Out", "U_index", "E_index"});
+    SpMM(op, "max", graph.sptr(), X, Y, Z, {argX, argY});
   });
 
 DGL_REGISTER_GLOBAL("kernel2._CAPI_DGLKernelUOpEMin")
@@ -179,6 +188,7 @@ DGL_REGISTER_GLOBAL("kernel2._CAPI_DGLKernelUOpEMin")
     NDArray argY = args[6];
     CheckCtx(graph->Context(), {X, Y, Z, argX, argY},
         {"U_data", "E_data", "Out", "U_index", "E_index"});
+    SpMM(op, "min", graph.sptr(), X, Y, Z, {argX, argY});
   });
 
 DGL_REGISTER_GLOBAL("kernel2._CAPI_DGLKernelUOpV")
@@ -189,6 +199,7 @@ DGL_REGISTER_GLOBAL("kernel2._CAPI_DGLKernelUOpV")
     NDArray Y = args[3];
     NDArray Z = args[4];
     CheckCtx(graph->Context(), {X, Y, Z}, {"U_data", "V_data", "Out"});
+    SDDMM(op, graph.sptr(), X, Y, Z, {});
   });
 
 }  // namespace kernel

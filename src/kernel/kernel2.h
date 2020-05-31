@@ -7,13 +7,13 @@
 #define DGL_KERNEL_KERNEL2_H_
 
 #include <dgl/array.h>
-#include "../graph/unit_graph.h"
+#include <dgl/base_heterograph.h>
 
 namespace dgl {
 namespace kernel {
 
 void SpMM(const std::string& op, const std::string& reduce,
-          const UnitGraph* graph,
+          HeteroGraphPtr graph,
           NDArray ufeat,
           NDArray efeat,
           NDArray out,
@@ -37,7 +37,7 @@ void SpMMCoo(const std::string& op, const std::string& reduce,
              std::vector<NDArray> out_aux);
 
 void SDDMM(const std::string& op,
-           const UnitGraph* graph,
+           HeteroGraphPtr graph,
            NDArray ufeat,
            NDArray efeat,
            NDArray out,
