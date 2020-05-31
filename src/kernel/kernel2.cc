@@ -178,7 +178,8 @@ DGL_REGISTER_GLOBAL("kernel2._CAPI_DGLKernelCopyESum")
     NDArray Y = args[1];
     NDArray Z = args[2];
     CheckCtx(graph->Context(), {Y, Z}, {"E_data", "Out"});
-    SpMM("copy_e", "sum", graph.sptr(), aten::NullArray(), Y, Z, {});
+    SpMM("copy_e", "sum", graph.sptr(), aten::NullArray(), Y, Z, {
+      aten::NullArray(), aten::NullArray()});
   });
 
 DGL_REGISTER_GLOBAL("kernel2._CAPI_DGLKernelCopyEMax")
@@ -209,7 +210,8 @@ DGL_REGISTER_GLOBAL("kernel2._CAPI_DGLKernelCopyU")
     NDArray X = args[1];
     NDArray Z = args[2];
     CheckCtx(graph->Context(), {X, Z}, {"U_data", "Out"});
-    SDDMM("copy_u", graph.sptr(), X, aten::NullArray(), Z, {});
+    SDDMM("copy_u", graph.sptr(), X, aten::NullArray(), Z, {
+      aten::NullArray(), aten::NullArray()});
   });
 
 DGL_REGISTER_GLOBAL("kernel2._CAPI_DGLKernelUOpEMax")
@@ -248,7 +250,7 @@ DGL_REGISTER_GLOBAL("kernel2._CAPI_DGLKernelUOpV")
     NDArray Y = args[3];
     NDArray Z = args[4];
     CheckCtx(graph->Context(), {X, Y, Z}, {"U_data", "V_data", "Out"});
-    SDDMM(op, graph.sptr(), X, Y, Z, {});
+    SDDMM(op, graph.sptr(), X, Y, Z, {aten::NullArray(), aten::NullArray()});
   });
 
 }  // namespace kernel
