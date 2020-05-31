@@ -179,7 +179,7 @@ __global__ void SpMMCsrKernel(
 template <typename Idx, typename DType,
           typename BinaryOp, typename ReduceOp>
 void SpMMCoo(
-    dgl::aten::COOMatrix coo,
+    const dgl::aten::COOMatrix& coo,
     NDArray ufeat, NDArray efeat,
     NDArray out, NDArray argu, NDArray arge) {
   Idx *row = static_cast<Idx*>(coo.row->data),
@@ -225,7 +225,7 @@ void SpMMCoo(
 template <typename Idx, typename DType,
           typename BinaryOp, typename ReduceOp>
 void SpMMBcastCoo(
-    dgl::aten::COOMatrix coo,
+    const dgl::aten::COOMatrix& coo,
     NDArray ufeat, NDArray efeat,
     NDArray out, NDArray argu, NDArray arge,
     BcastInfo info) {
@@ -272,7 +272,7 @@ void SpMMBcastCoo(
 template <typename Idx, typename DType,
           typename BinaryOp, typename ReduceOp>
 void SpMMCsr(
-    dgl::aten::CSRMatrix csr,
+    const dgl::aten::CSRMatrix& csr,
     NDArray ufeat, NDArray efeat,
     NDArray out, NDArray argu, NDArray arge) {
   Idx *indptr = static_cast<Idx*>(csr.indptr->data),

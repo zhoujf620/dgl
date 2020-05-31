@@ -112,7 +112,7 @@ __global__ void SDDMMCsrKernel(
 
 template <typename Idx, typename DType, typename Op>
 void SDDMMCoo(
-    dgl::aten::COOMatrix coo,
+    const dgl::aten::COOMatrix& coo,
     NDArray ufeat,
     NDArray vfeat,
     NDArray out) {
@@ -145,7 +145,7 @@ void SDDMMCoo(
 
 template <typename Idx, typename DType, typename Op>
 void SDDMMCsr(
-    dgl::aten::CSRMatrix csr,
+    const dgl::aten::CSRMatrix& csr,
     NDArray ufeat,
     NDArray vfeat,
     NDArray out) {
