@@ -12,6 +12,11 @@ void SpMMCsr(const std::string& op, const std::string& reduce,
              NDArray efeat,
              NDArray out,
              std::vector<NDArray> out_aux) {
+  if (!aten::IsNullArray(ufeat))
+    CHECK_EQ(ufeat->shape[0], csr.num_cols);
+  if (!aten::IsNullArray(efeat))
+    CHECK_EQ(efeat->shape[0], csr.indices->shape[0]);
+  CHECK_EQ(out->shape[0], csr.num_rows);
   if (reduce == "sum") {
     SWITCH_OP(op, Op, {
       cpu::SpMMSumCsr<IdType, DType, Op>(csr, ufeat, efeat, out);
@@ -85,6 +90,11 @@ void SpMMCoo(const std::string& op, const std::string& reduce,
              NDArray efeat,
              NDArray out,
              std::vector<NDArray> out_aux) {
+  if (!aten::IsNullArray(ufeat))
+    CHECK_EQ(ufeat->shape[0], coo.num_rows);
+  if (!aten::IsNullArray(efeat))
+    CHECK_EQ(efeat->shape[0], coo.row->shape[0]);
+  CHECK_EQ(out->shape[0], coo.num_cols);
   if (reduce == "sum") {
     SWITCH_OP(op, Op, {
       cpu::SpMMSumCoo<IdType, DType, Op>(coo, ufeat, efeat, out);

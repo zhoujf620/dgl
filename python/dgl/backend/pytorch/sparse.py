@@ -2,6 +2,7 @@ import torch as th
 from .tensor import zerocopy_to_dgl_ndarray as to_dgl_nd
 from .tensor import zerocopy_from_dgl_ndarray as from_dgl_nd
 from ... import kernel2 as K
+from ...base import DGLError
 
 def _reduce_grad(grad, shape):
     """Reduce gradient on the broadcast dimension
@@ -373,8 +374,10 @@ class UAddV(th.autograd.Function):
 class UDotV(th.autograd.Function):
     @staticmethod
     def forward(ctx, g, X, Y):
+        if X.shape[-1] != Y.shape[-1]:
+            raise DGLError("Invalid tensor shapes for u_dot_v: {}, {}".format(x.shape, y.shape))
         bshape = K.infer_broadcast_shape(X.shape[1:-1], Y.shape[1:-1])
-        Z = th.zeros((g.number_of_edges(0),) + bshape + (1,), device=X.device, dtype=X.dtype)
+        Z = th.zeros((g.number_of_edges(0),) + bshape, device=X.device, dtype=X.dtype)
         K.u_op_v('dot', g, to_dgl_nd(X), to_dgl_nd(Y), to_dgl_nd(Z))
         ctx.backward_cache = g
         ctx.save_for_backward(X, Y)

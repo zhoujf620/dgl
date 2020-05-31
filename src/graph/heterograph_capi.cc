@@ -538,11 +538,7 @@ DGL_REGISTER_GLOBAL("heterograph_index._CAPI_DGLHeteroReverse")
     auto g = std::dynamic_pointer_cast<HeteroGraph>(hg.sptr());
     auto rev_ug = g->relation_graphs()[0]->Reverse();
     const auto& num_nodes = rev_ug->NumVerticesPerType();
-    if (num_nodes.size() == 1) {
-      *rv = CreateHeteroGraph(hg->meta_graph(), {rev_ug}, num_nodes);
-    } else {
-      *rv = CreateHeteroGraph(hg->meta_graph(), {rev_ug}, {num_nodes[1], num_nodes[0]});
-    }
+    *rv = CreateHeteroGraph(hg->meta_graph(), {rev_ug}, num_nodes);
   });
 
 }  // namespace dgl

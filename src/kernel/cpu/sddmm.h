@@ -65,6 +65,73 @@ void SDDMMCoo(const aten::COOMatrix& coo,
   }
 }
 
+template <typename IdType, typename DType>
+void SDDMMDotCsr(const aten::CSRMatrix& csr,
+                 NDArray ufeat, NDArray vfeat, NDArray out) {
+  const bool has_idx = !aten::IsNullArray(csr.data);
+  const IdType* indptr = static_cast<IdType*>(csr.indptr->data);
+  const IdType* indices = static_cast<IdType*>(csr.indices->data);
+  const IdType* edges = has_idx?  static_cast<IdType*>(csr.data->data) : nullptr;
+  const DType* X = static_cast<DType*>(ufeat->data);
+  const DType* Y = static_cast<DType*>(vfeat->data);
+  int64_t dim = 1;
+  for (int i = 1; i < out->ndim; ++i)
+    dim *= out->shape[i];
+  const int64_t len = ufeat->shape[ufeat->ndim - 1];
+  DType* O = static_cast<DType*>(out->data);
+#pragma omp parallel for
+  for (IdType rid = 0; rid < csr.num_rows; ++rid) {
+    const IdType row_start = indptr[rid], row_end = indptr[rid + 1];
+    for (IdType j = row_start; j < row_end; ++j) {
+      const IdType cid = indices[j];
+      const IdType eid = has_idx? edges[j] : j;
+      DType* out_off = O + eid * dim;
+      for (int64_t k = 0; k < dim; ++k) {
+        const DType* lhs_off = X + (rid * dim + k) * len;
+        const DType* rhs_off = Y + (cid * dim + k) * len;
+        DType rst = 0;
+        for (int64_t l = 0; l < len; ++l) {
+          rst += lhs_off[l] * rhs_off[l];
+        }
+        out_off[k] = rst;
+      }
+    }
+  }
+}
+
+template <typename IdType, typename DType>
+void SDDMMDotCoo(const aten::COOMatrix& coo,
+                 NDArray ufeat, NDArray vfeat, NDArray out) {
+  const bool has_idx = !aten::IsNullArray(coo.data);
+  const IdType* row = static_cast<IdType*>(coo.row->data);
+  const IdType* col = static_cast<IdType*>(coo.col->data);
+  const IdType* edges = has_idx? static_cast<IdType*>(coo.data->data) : nullptr;
+  const DType* X = static_cast<DType*>(ufeat->data);
+  const DType* Y = static_cast<DType*>(vfeat->data);
+  int64_t dim = 1;
+  for (int i = 1; i < out->ndim; ++i)
+    dim *= out->shape[i];
+  const int64_t len = ufeat->shape[ufeat->ndim - 1];
+  DType* O = static_cast<DType*>(out->data);
+  const int64_t nnz = coo.row->shape[0];
+#pragma omp parallel for
+  for (IdType i = 0; i < nnz; ++i) {
+    const IdType rid = row[i];
+    const IdType cid = col[i];
+    const IdType eid = has_idx? edges[i] : i;
+    DType* out_off = O + eid * dim;
+    for (int64_t k = 0; k < dim; ++k) {
+      const DType* lhs_off = X + (rid * dim + k) * len;
+      const DType* rhs_off = Y + (cid * dim + k) * len;
+      DType rst = 0;
+      for (int64_t l = 0; l < len; ++l) {
+        rst += lhs_off[l] * rhs_off[l];
+      }
+      out_off[k] = rst;
+    }
+  }
+}
+
 template <typename IdType, typename DType, typename Op>
 void SDDMMBcastCsr(const BcastInfo& info,
                    const aten::CSRMatrix& csr,
