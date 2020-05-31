@@ -43,7 +43,7 @@ void SpMM(const std::string& op, const std::string& reduce,
   format = SparseFormat::kCSC;
   ATEN_XPU_SWITCH(graph->Context().device_type, XPU, {
     ATEN_ID_TYPE_SWITCH(graph->DataType(), IdType, {
-      ATEN_FLOAT_TYPE_SWITCH(ufeat->dtype, DType, "Feature data", {
+      ATEN_FLOAT_TYPE_SWITCH(out->dtype, DType, "Feature data", {
         if (format == SparseFormat::kCSC) {
           SpMMCsr<XPU, IdType, DType>(op, reduce, graph->GetCSCMatrix(0),
                                       ufeat, efeat, out, out_aux);
@@ -69,7 +69,7 @@ void SDDMM(const std::string& op,
   format = SparseFormat::kCOO;
   ATEN_XPU_SWITCH(graph->Context().device_type, XPU, {
     ATEN_ID_TYPE_SWITCH(graph->DataType(), IdType, {
-      ATEN_FLOAT_TYPE_SWITCH(ufeat->dtype, DType, "Feature data", {
+      ATEN_FLOAT_TYPE_SWITCH(out->dtype, DType, "Feature data", {
         if (format == SparseFormat::kCSR) {
           SDDMMCsr<XPU, IdType, DType>(op, graph->GetCSCMatrix(0),
                                        ufeat, efeat, out, out_aux);
