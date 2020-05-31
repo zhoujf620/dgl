@@ -3,6 +3,8 @@
  * \file kernel/kernel2.cc
  * \brief New kernels
  */
+#include "./kernel2.h"
+
 #include <dgl/packed_func_ext.h>
 #include <dgl/base_heterograph.h>
 
@@ -30,6 +32,57 @@ inline void CheckCtx(
 
 }  // namespace
 
+void SpMM(const std::string& op, const std::string& reduce,
+          const UnitGraph* graph,
+          NDArray ufeat,
+          NDArray efeat,
+          NDArray out,
+          std::vector<NDArray> out_aux,
+          SparseFormat format) {
+  // TODO(minjie): fmt tuning
+  format = SparseFormat::kCSR;
+  ATEN_XPU_SWITCH(graph->Context().device_type, XPU, {
+    ATEN_ID_TYPE_SWITCH(graph->DataType(), IdType, {
+      ATEN_FLOAT_TYPE_SWITCH(ufeat->dtype, DType, "Feature data", {
+        if (format == SparseFormat::kCSR) {
+          SpMMCsr<XPU, IdType, DType>(op, reduce, graph->GetCSRMatrix(0),
+                                      ufeat, efeat, out, out_aux);
+        } else if (format == SparseFormat::kCOO) {
+          SpMMCoo<XPU, IdType, DType>(op, reduce, graph->GetCOOMatrix(0),
+                                      ufeat, efeat, out, out_aux);
+        } else {
+          LOG(FATAL) << "SpMM only supports CSR and COO foramts";
+        }
+      });
+    });
+  });
+}
+
+void SDDMM(const std::string& op,
+           const UnitGraph* graph,
+           NDArray ufeat,
+           NDArray efeat,
+           NDArray out,
+           std::vector<NDArray> out_aux,
+           SparseFormat format) {
+  // TODO(minjie): fmt tuning
+  format = SparseFormat::kCOO;
+  ATEN_XPU_SWITCH(graph->Context().device_type, XPU, {
+    ATEN_ID_TYPE_SWITCH(graph->DataType(), IdType, {
+      ATEN_FLOAT_TYPE_SWITCH(ufeat->dtype, DType, "Feature data", {
+        if (format == SparseFormat::kCSR) {
+          SDDMMCsr<XPU, IdType, DType>(op, graph->GetCSRMatrix(0),
+                                       ufeat, efeat, out, out_aux);
+        } else if (format == SparseFormat::kCOO) {
+          SDDMMCoo<XPU, IdType, DType>(op, graph->GetCOOMatrix(0),
+                                       ufeat, efeat, out, out_aux);
+        } else {
+          LOG(FATAL) << "SpMM only supports CSR and COO foramts";
+        }
+      });
+    });
+  });
+}
 
 DGL_REGISTER_GLOBAL("kernel2._CAPI_DGLKernelUOpESum")
 .set_body([] (DGLArgs args, DGLRetValue* rv) {
@@ -39,6 +92,7 @@ DGL_REGISTER_GLOBAL("kernel2._CAPI_DGLKernelUOpESum")
     NDArray Y = args[3];
     NDArray Z = args[4];
     CheckCtx(graph->Context(), {X, Y, Z}, {"U_data", "E_data", "Out"});
+    CHECK_EQ(graph->NumEdgeTypes(), 1);
   });
 
 DGL_REGISTER_GLOBAL("kernel2._CAPI_DGLKernelCopyUSum")
