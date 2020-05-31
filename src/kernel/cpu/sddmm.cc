@@ -11,9 +11,13 @@ void SDDMMCsr(const std::string& op,
               NDArray vfeat,
               NDArray out,
               std::vector<NDArray> out_aux) {
-  SWITCH_OP(op, Op, {
-    cpu::SDDMMCsr<IdType, DType, Op>(csr, ufeat, vfeat, out);
-  });
+  if (op == "dot") {
+    cpu::SDDMMDotCsr<IdType, DType>(csr, ufeat, vfeat, out);
+  } else {
+    SWITCH_OP(op, Op, {
+      cpu::SDDMMCsr<IdType, DType, Op>(csr, ufeat, vfeat, out);
+    });
+  }
 }
 
 template void SDDMMCsr<kDLCPU, int32_t, float>(
@@ -36,9 +40,13 @@ void SDDMMCoo(const std::string& op,
               NDArray vfeat,
               NDArray out,
               std::vector<NDArray> out_aux) {
-  SWITCH_OP(op, Op, {
-    cpu::SDDMMCoo<IdType, DType, Op>(coo, ufeat, vfeat, out);
-  });
+  if (op == "dot") {
+    cpu::SDDMMDotCoo<IdType, DType>(coo, ufeat, vfeat, out);
+  } else {
+    SWITCH_OP(op, Op, {
+      cpu::SDDMMCoo<IdType, DType, Op>(coo, ufeat, vfeat, out);
+    });
+  }
 }
 
 template void SDDMMCoo<kDLCPU, int32_t, float>(
