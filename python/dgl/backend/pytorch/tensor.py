@@ -467,7 +467,8 @@ def _reduce_grad(grad, shape):
     in_shape = (1,) * num_to_squeeze + in_shape
     reduce_idx = th.nonzero(th.tensor(grad_shape) - th.tensor(in_shape))
     reduce_idx += 1  # skip batch dim
-    grad = grad.sum(dim=tuple(reduce_idx), keepdim=True)
+    if len(reduce_idx) != 0:
+        grad = grad.sum(dim=tuple(reduce_idx), keepdim=True)
     return grad.view(shape)
 
 def sync():
