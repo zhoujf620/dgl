@@ -244,8 +244,12 @@ void SDDMMCsr(
     reduce_dim = ufeat->shape[ufeat->ndim - 1];
   }
 
-  const dim3 nblks(E, 1);
-  const dim3 nthrs(1, (128 < len) ? 128 : len);
+  const int ntx = utils::FindNumThreads(len, 1024);
+  const int nty = 1024 / ntx;
+  const int nbx = (len + ntx - 1) / ntx;
+  const int nby = (E + nty - 1) / nty;
+  const dim3 nblks(nbx, nby);
+  const dim3 nthrs(ntx, nty);
 
   SDDMMCsrKernel<Idx, DType, Op>
     <<<nblks, nthrs, 0, thr_entry->stream>>>(
@@ -296,8 +300,12 @@ void SDDMMBcastCsr(
     reduce_dim = ufeat->shape[ufeat->ndim - 1];
   }
 
-  const dim3 nblks(E, 1);
-  const dim3 nthrs(1, (128 < len) ? 128 : len);
+  const int ntx = utils::FindNumThreads(len, 1024);
+  const int nty = 1024 / ntx;
+  const int nbx = (len + ntx - 1) / ntx;
+  const int nby = (E + nty - 1) / nty;
+  const dim3 nblks(nbx, nby);
+  const dim3 nthrs(ntx, nty);
 
   SDDMMCsrKernel<Idx, DType, Op>
     <<<nblks, nthrs, 0, thr_entry->stream>>>(
