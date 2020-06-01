@@ -5,7 +5,6 @@
 #ifndef DGL_KERNEL_CUDA_SDDMM_CUH_
 #define DGL_KERNEL_CUDA_SDDMM_CUH_
 
-#include "../../graph/unit_graph.h"
 #include "../utils.h"
 #include "../binary_reduce_impl_decl.h"
 #include "../binary_reduce.h"

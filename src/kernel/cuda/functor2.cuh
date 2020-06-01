@@ -6,7 +6,7 @@ namespace binary {
 template <typename DType>
 struct Add {
   static __device__ __forceinline__ DType Call(
-      DType *lhs, DType *rhs, int64_t len_lhs = 1, int64_t len_rhs = 1) {
+      const DType *lhs, const DType *rhs, int64_t len_lhs = 1, int64_t len_rhs = 1) {
     return lhs[0] + rhs[0];
   }
   static __device__ __forceinline__ bool UseLhs() {
@@ -26,7 +26,7 @@ struct Add {
 template <typename DType>
 struct Mul {
   static __device__ __forceinline__ DType Call(
-      DType *lhs, DType *rhs, int64_t len_lhs = 1, int64_t len_rhs = 1) {
+      const DType *lhs, const DType *rhs, int64_t len_lhs = 1, int64_t len_rhs = 1) {
     return lhs[0] * rhs[0];
   }
   static __device__ __forceinline__ bool UseLhs() {
@@ -46,7 +46,7 @@ struct Mul {
 template <typename DType>
 struct CopyU {
   static __device__ __forceinline__ DType Call(
-      DType *lhs, DType *rhs, int64_t len_lhs = 1, int64_t len_rhs = 1) {
+      const DType *lhs, const DType *rhs, int64_t len_lhs = 1, int64_t len_rhs = 1) {
     return lhs[0];
   }
   static __device__ __forceinline__ bool UseLhs() {
@@ -66,7 +66,7 @@ struct CopyU {
 template <typename DType>
 struct CopyE {
   static __device__ __forceinline__ DType Call(
-      DType *lhs, DType *rhs, int64_t len_lhs = 1, int64_t len_rhs = 1) {
+      const DType *lhs, const DType *rhs, int64_t len_lhs = 1, int64_t len_rhs = 1) {
     return rhs[0];
   }
   static __device__ __forceinline__ bool UseLhs() {
@@ -86,7 +86,7 @@ struct CopyE {
 template <typename DType>
 struct Dot {
   static __device__ __forceinline__ DType Call(
-      DType *lhs, DType *rhs, int64_t len_lhs = 1, int64_t len_rhs = 1) {
+      const DType *lhs, const DType *rhs, int64_t len_lhs = 1, int64_t len_rhs = 1) {
     DType rst = static_cast<DType>(0);
     for (int64_t i = 0; i < max(len_lhs, len_rhs); ++i) {
       rst += lhs[min(i, len_lhs - 1)] * rhs[min(i, len_rhs - 1)];
