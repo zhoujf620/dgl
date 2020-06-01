@@ -44,6 +44,9 @@ int64_t Prod(const std::vector<int64_t>& vec);
 template <int XPU, typename DType>
 void Fill(const DLContext& ctx, DType* ptr, size_t length, DType val);
 
+template <typename DType>
+void IndexSelectGPU(const DType* val, const int32_t* idx, int64_t length, DType* out);
+
 /*
  * !\brief Create minigun CSR from two ndarrays.
  */
