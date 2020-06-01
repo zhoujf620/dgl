@@ -5,105 +5,60 @@ namespace cuda {
 namespace binary {
 template <typename DType>
 struct Add {
+  static constexpr bool use_lhs = true;
+  static constexpr bool use_rhs = true;
+  static constexpr bool reduce_last_dim = false;
   static __device__ __forceinline__ DType Call(
-      DType *lhs, DType *rhs, int64_t len_lhs = 1, int64_t len_rhs = 1) {
+      const DType *lhs, const DType *rhs, int64_t len_lhs = 1, int64_t len_rhs = 1) {
     return lhs[0] + rhs[0];
-  }
-  static __device__ __forceinline__ bool UseLhs() {
-    return true;
-  }
-  static __device__ __forceinline__ bool UseRhs() {
-    return true;
-  }
-  static __device__ __forceinline__ bool ReduceDim() {
-    return false;
-  }
-  static __device__ __forceinline__ int64_t ReduceSize(int64_t *feat_shp, int64_t ndim) {
-    return 1;
   }
 };
 
 template <typename DType>
 struct Mul {
+  static constexpr bool use_lhs = true;
+  static constexpr bool use_rhs = true;
+  static constexpr bool reduce_last_dim = false;
   static __device__ __forceinline__ DType Call(
-      DType *lhs, DType *rhs, int64_t len_lhs = 1, int64_t len_rhs = 1) {
+      const DType *lhs, const DType *rhs, int64_t len_lhs = 1, int64_t len_rhs = 1) {
     return lhs[0] * rhs[0];
-  }
-  static __device__ __forceinline__ bool UseLhs() {
-    return true;
-  }
-  static __device__ __forceinline__ bool UseRhs() {
-    return true;
-  }
-  static __device__ __forceinline__ bool ReduceDim() {
-    return false;
-  }
-  static __device__ __forceinline__ int64_t ReduceSize(int64_t *feat_shp, int64_t ndim) {
-    return 1;
   }
 };
 
 template <typename DType>
 struct CopyU {
+  static constexpr bool use_lhs = true;
+  static constexpr bool use_rhs = false;
+  static constexpr bool reduce_last_dim = false;
   static __device__ __forceinline__ DType Call(
-      DType *lhs, DType *rhs, int64_t len_lhs = 1, int64_t len_rhs = 1) {
+      const DType *lhs, const DType *rhs, int64_t len_lhs = 1, int64_t len_rhs = 1) {
     return lhs[0];
-  }
-  static __device__ __forceinline__ bool UseLhs() {
-    return true;
-  }
-  static __device__ __forceinline__ bool UseRhs() {
-    return false;
-  }
-  static __device__ __forceinline__ bool ReduceDim() {
-    return false;
-  }
-  static __device__ __forceinline__ int64_t ReduceSize(int64_t *feat_shp, int64_t ndim) {
-    return 1;
   }
 };
 
 template <typename DType>
 struct CopyE {
+  static constexpr bool use_lhs = false;
+  static constexpr bool use_rhs = true;
+  static constexpr bool reduce_last_dim = false;
   static __device__ __forceinline__ DType Call(
-      DType *lhs, DType *rhs, int64_t len_lhs = 1, int64_t len_rhs = 1) {
+      const DType *lhs, const DType *rhs, int64_t len_lhs = 1, int64_t len_rhs = 1) {
     return rhs[0];
-  }
-  static __device__ __forceinline__ bool UseLhs() {
-    return false;
-  }
-  static __device__ __forceinline__ bool UseRhs() {
-    return true;
-  }
-  static __device__ __forceinline__ bool ReduceDim() {
-    return false;
-  }
-  static __device__ __forceinline__ int64_t ReduceSize(int64_t *feat_shp, int64_t ndim) {
-    return 1;
   }
 };
 
 template <typename DType>
 struct Dot {
+  static constexpr bool use_lhs = true;
+  static constexpr bool use_rhs = true;
+  static constexpr bool reduce_last_dim = true;
   static __device__ __forceinline__ DType Call(
-      DType *lhs, DType *rhs, int64_t len_lhs = 1, int64_t len_rhs = 1) {
+      const DType *lhs, const DType *rhs, int64_t len_lhs = 1, int64_t len_rhs = 1) {
     DType rst = static_cast<DType>(0);
-    for (int64_t i = 0; i < max(len_lhs, len_rhs); ++i) {
-      rst += lhs[min(i, len_lhs - 1)] * rhs[min(i, len_rhs - 1)];
+    for (int64_t i = 0; i < len_lhs; ++i) {
+      rst += lhs[i] * rhs[i];
     }
     return rst;
-  }
-  static __device__ __forceinline__ bool UseLhs() {
-    return true;
-  }
-  static __device__ __forceinline__ bool UseRhs() {
-    return true;
-  }
-  static __device__ __forceinline__ bool ReduceDim() {
-    return true;
-  }
-  static __device__ __forceinline__ int64_t ReduceSize(int64_t *feat_shp, int64_t ndim) {
-    return feat_shp[ndim - 1];
   }
 };
 
@@ -115,17 +70,16 @@ template <typename Idx,
           typename DType,
           bool atomic=false>
 struct Sum {
-  static __device__ __forceinline__ void Call(Idx fid,
+  static constexpr DType zero = 0;
+  static constexpr bool require_arg = false;
+  static __device__ __forceinline__ void Call(
     DType *out_buf, Idx *arg_u_buf, Idx *arg_e_buf,
     DType val, Idx uid, Idx eid) {
     if (!atomic) {
-      out_buf[fid] += val;
+      *out_buf += val;
     } else {
-      cuda::AtomicAdd(out_buf + fid, val);
+      cuda::AtomicAdd(out_buf, val);
     }
-  }
-  static __device__ __forceinline__ bool RequireArg() {
-    return false;
   }
   static __device__ __forceinline__ void CallArg(Idx fid,
     Idx *arg_u_buf, Idx *arg_e_buf,
@@ -138,22 +92,20 @@ template <typename Idx,
           typename DType,
           bool atomic=false>
 struct Max {
-  static __device__ __forceinline__ void Call(Idx fid,
+  static constexpr DType zero = std::numeric_limits<DType>::lowest();
+  static constexpr bool require_arg = true;
+  static __device__ __forceinline__ void Call(
     DType *out_buf, Idx *arg_u_buf, Idx *arg_e_buf,
     DType val, Idx uid, Idx eid) {
     if (!atomic) {
-      Idx max_val = max(out_buf[fid], val);
-      if (max_val == val) {
-        out_buf[fid] = max_val;
-        arg_u_buf[fid] = uid;
-        arg_e_buf[fid] = eid;
+      if (*out_buf < val) {
+        *out_buf = val;
+        *arg_u_buf = uid;
+        *arg_e_buf = eid;
       }
     } else {
-      cuda::AtomicMax(out_buf + fid, val);
+      cuda::AtomicMax(out_buf, val);
     }
-  }
-  static __device__ __forceinline__ bool RequireArg() {
-    return true;
   }
   static __device__ __forceinline__ void CallArg(Idx fid,
     Idx *arg_u_buf, Idx *arg_e_buf,
@@ -173,22 +125,20 @@ template <typename Idx,
           typename DType,
           bool atomic=false>
 struct Min {
-  static __device__ __forceinline__ void Call(Idx fid,
+  static constexpr DType zero = std::numeric_limits<DType>::max();
+  static constexpr bool require_arg = true;
+  static __device__ __forceinline__ void Call(
     DType *out_buf, Idx *arg_u_buf, Idx *arg_e_buf,
     DType val, Idx uid, Idx eid) {
     if (!atomic) {
-      Idx min_val = min(out_buf[fid], val);
-      if (min_val == val) {
-        out_buf[fid] = min_val;
-        arg_u_buf[fid] = uid;
-        arg_e_buf[fid] = eid;
+      if (*out_buf > val) {
+        *out_buf = val;
+        *arg_u_buf = uid;
+        *arg_e_buf = eid;
       }
     } else {
-      cuda::AtomicMin(out_buf + fid, val);
+      cuda::AtomicMin(out_buf, val);
     }
-  }
-  static __device__ __forceinline__ bool RequireArg() {
-    return true;
   }
   static __device__ __forceinline__ void CallArg(Idx fid,
     Idx *arg_u_buf, Idx *arg_e_buf,

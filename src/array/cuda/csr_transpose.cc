@@ -70,7 +70,7 @@ CSRMatrix CSRTranspose(CSRMatrix csr) {
       thr_entry->cusparse_handle,
       csr.num_rows, csr.num_cols, nnz,
       static_cast<const float*>(data_ptr), indptr_ptr, indices_ptr,
-      static_cast<float*>(t_data_ptr), t_indptr_ptr, t_indices_ptr,
+      static_cast<float*>(t_data_ptr), t_indices_ptr, t_indptr_ptr,
       CUSPARSE_ACTION_NUMERIC,
       CUSPARSE_INDEX_BASE_ZERO));
 #endif

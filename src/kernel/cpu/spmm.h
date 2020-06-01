@@ -33,8 +33,6 @@ void SpMMSumCsr(const aten::CSRMatrix& csr,
         const IdType eid = has_idx? edges[j] : j;
         const DType* lhs_off = Op::use_lhs? X + cid * dim + k : nullptr;
         const DType* rhs_off = Op::use_rhs? W + eid * dim + k : nullptr;
-        CHECK_LT(cid * dim + k, ufeat.Numel());
-
         accum += Op::Call(lhs_off, rhs_off);
       }
       out_off[k] = accum;

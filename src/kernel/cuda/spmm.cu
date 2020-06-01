@@ -38,7 +38,7 @@ void SpMMCsr(const std::string& op, const std::string& reduce,
   if (reduce == "sum") {
     SWITCH_OP(op, Op, {
       cuda::SpMMCsr<IdType, DType, Op, cuda::reduce::Sum<IdType, DType> >(
-          csr, ufeat, efeat, out, out_aux[0], out_aux[1]);
+          csr, ufeat, efeat, out, aten::NullArray(), aten::NullArray());
     });
   } else if (reduce == "max") {
     SWITCH_OP(op, Op, {

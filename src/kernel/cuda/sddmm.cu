@@ -21,8 +21,11 @@ namespace kernel {
     } else if ((op) == "copy_e") {                                  \
       typedef dgl::kernel::cuda::binary::CopyE<DType> Op;           \
       { __VA_ARGS__ }                                               \
+    } else if ((op) == "dot") {                                  \
+      typedef dgl::kernel::cuda::binary::Dot<DType> Op;           \
+      { __VA_ARGS__ }                                               \
     } else {                                                        \
-      LOG(FATAL) << "Unsupported SpMM binary operator: " << op;     \
+      LOG(FATAL) << "Unsupported SpMM/SDDMM binary operator: " << op;     \
     }                                                               \
   } while (0)
 
@@ -33,8 +36,7 @@ void SDDMMCsr(const std::string& op,
               NDArray ufeat,
               NDArray vfeat,
               NDArray out,
-              std::vector<NDArray> out_aux
-              ) {
+              std::vector<NDArray> out_aux) {
   SWITCH_OP(op, Op, {
     cuda::SDDMMCsr<IdType, DType, Op>(csr, ufeat, vfeat, out);
   });

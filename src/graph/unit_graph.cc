@@ -1301,8 +1301,7 @@ UnitGraph::CSRPtr UnitGraph::GetInCSR(bool inplace) const {
     } else {
       CHECK(coo_) << "None of CSR, COO exist";
       const auto& adj = coo_->adj();
-      const auto& newadj = aten::COOToCSR(
-          aten::COOMatrix{adj.num_cols, adj.num_rows, adj.col, adj.row});
+      const auto& newadj = aten::COOToCSR(aten::COOTranspose(adj));
       ret = std::make_shared<CSR>(meta_graph(), newadj);
       if (inplace)
         const_cast<UnitGraph*>(this)->in_csr_ = ret;
