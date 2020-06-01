@@ -8,54 +8,6 @@ namespace dgl {
 namespace kernel {
 namespace cpu {
 
-/*
- * This func do the followings:
- *   1. Convert flattened index to multi-dimension index
- *      according to output shape (assume row-major).
- *   2. Convert multi-dimension index to flattened index for lhs.
- *   3. Convert multi-dimension index to flattened index for rhs.
- */
-void UnravelRavel(
-    const int64_t idx, const int ndim, const int64_t* out_shape, const int64_t* out_stride,
-    const int64_t* lhs_shape, const int64_t* lhs_stride,
-    const int64_t* rhs_shape, const int64_t* rhs_stride,
-    int64_t *lhs_out, int64_t *rhs_out) {
-  if (out_stride[0] == lhs_stride[0]) {
-    for (int d = 0; d < ndim; ++d) {
-      int64_t o_sh = out_shape[d];
-      int64_t o_st = out_stride[d];
-      int64_t rhs_sh = rhs_shape[d];
-      int64_t rhs_st = rhs_stride[d];
-      int64_t i = (idx / o_st) % o_sh;
-      /*
-       * Simplfied for rhs_out += min(i, rhs_sh - 1) * rhs_st;
-       * rhs_sh be o_sh or 1
-       */
-      if (rhs_sh > i) {
-        *rhs_out += i * rhs_st;
-      }
-    }
-    *lhs_out = idx;
-  } else {
-    for (int d = 0; d < ndim; ++d) {
-      int64_t o_sh = out_shape[d];
-      int64_t o_st = out_stride[d];
-      int64_t lhs_sh = lhs_shape[d];
-      int64_t lhs_st = lhs_stride[d];
-
-      int64_t i = (idx / o_st) % o_sh;
-      /*
-       * Simplfied for lhs_out += min(i, lhs_sh - 1) * lhs_st;
-       * lhs_sh be o_sh or 1
-       */
-      if (lhs_sh > i) {
-        *lhs_out += i * lhs_st;
-      }
-    }
-    *rhs_out = idx;
-  }
-}
-
 template <typename IdType, typename DType, typename Op>
 void SpMMSumCsr(const aten::CSRMatrix& csr,
                 NDArray ufeat, NDArray efeat,
@@ -223,7 +175,37 @@ void SpMMBcastSumCsr(
     const aten::CSRMatrix& csr,
     NDArray ufeat, NDArray efeat,
     NDArray out) {
-  LOG(FATAL) << "not implemented";
+  const bool has_idx = !aten::IsNullArray(csr.data);
+  const IdType* indptr = static_cast<IdType*>(csr.indptr->data);
+  const IdType* indices = static_cast<IdType*>(csr.indices->data);
+  const IdType* edges = has_idx ? static_cast<IdType*>(csr.data->data) : nullptr;
+  const DType* X = Op::use_lhs? static_cast<DType*>(ufeat->data) : nullptr;
+  const DType* W = Op::use_rhs? static_cast<DType*>(efeat->data) : nullptr;
+  int64_t dim = 1, lhs_dim = 1, rhs_dim = 1;
+  for (int i = 1; i < out->ndim; ++i) {
+    dim *= out->shape[i];
+    lhs_dim *= ufeat->shape[i];
+    rhs_dim *= efeat->shape[i];
+  }
+  DType* O = static_cast<DType*>(out->data);
+#pragma omp parallel for
+  for (IdType rid = 0; rid < csr.num_rows; ++rid) {
+    const IdType row_start = indptr[rid], row_end = indptr[rid + 1];
+    DType* out_off = O + rid * dim;
+    for (int64_t k = 0; k < dim; ++k) {
+      DType accum = 0;
+      for (IdType j = row_start; j < row_end; ++j) {
+        const IdType cid = indices[j];
+        const IdType eid = has_idx? edges[j] : j;
+        const DType* lhs_off = Op::use_lhs? X + cid * lhs_dim + info.lhs_offset[k] : nullptr;
+        const DType* rhs_off = Op::use_rhs? W + eid * rhs_dim + info.rhs_offset[k] : nullptr;
+        CHECK_LT(cid * lhs_dim + info.lhs_offset[k], ufeat.Numel());
+
+        accum += Op::Call(lhs_off, rhs_off);
+      }
+      out_off[k] = accum;
+    }
+  }
 }
 
 template <typename IdType, typename DType, typename Op, typename Cmp>
@@ -232,7 +214,51 @@ void SpMMBcastCmpCsr(
     const aten::CSRMatrix& csr,
     NDArray ufeat, NDArray efeat,
     NDArray out, NDArray argu, NDArray arge) {
-  LOG(FATAL) << "not implemented";
+  const bool has_idx = !aten::IsNullArray(csr.data);
+  const IdType* indptr = static_cast<IdType*>(csr.indptr->data);
+  const IdType* indices = static_cast<IdType*>(csr.indices->data);
+  const IdType* edges = has_idx ? static_cast<IdType*>(csr.data->data) : nullptr;
+  const DType* X = Op::use_lhs? static_cast<DType*>(ufeat->data) : nullptr;
+  const DType* W = Op::use_rhs? static_cast<DType*>(efeat->data) : nullptr;
+  int64_t dim = 1, lhs_dim = 1, rhs_dim = 1;
+  for (int i = 1; i < out->ndim; ++i) {
+    dim *= out->shape[i];
+    lhs_dim *= ufeat->shape[i];
+    rhs_dim *= efeat->shape[i];
+  }
+  DType* O = static_cast<DType*>(out->data);
+  IdType* argX = Op::use_lhs? static_cast<IdType*>(argu->data) : nullptr;
+  IdType* argW = Op::use_rhs? static_cast<IdType*>(arge->data) : nullptr;
+#pragma omp parallel for
+  for (IdType rid = 0; rid < csr.num_rows; ++rid) {
+    const IdType row_start = indptr[rid], row_end = indptr[rid + 1];
+    DType* out_off = O + rid * dim;
+    IdType* argx_off = argX + rid * dim;
+    IdType* argw_off = argW + rid * dim;
+    for (int64_t k = 0; k < dim; ++k) {
+      DType accum = Cmp::zero;
+      IdType ax = 0, aw = 0;
+      for (IdType j = row_start; j < row_end; ++j) {
+        const IdType cid = indices[j];
+        const IdType eid = has_idx? edges[j] : j;
+        const DType* lhs_off = Op::use_lhs? X + cid * lhs_dim + info.lhs_offset[k] : nullptr;
+        const DType* rhs_off = Op::use_rhs? W + eid * rhs_dim + info.rhs_offset[k] : nullptr;
+        const DType val = Op::Call(lhs_off, rhs_off);
+        if (Cmp::Call(accum, val)) {
+          accum = val;
+          if (Op::use_lhs)
+            ax = cid;
+          if (Op::use_rhs)
+            aw = eid;
+        }
+      }
+      out_off[k] = accum;
+      if (Op::use_lhs)
+        argx_off[k] = ax;
+      if (Op::use_rhs)
+        argw_off[k] = aw;
+    }
+  }
 }
 
 namespace op {
