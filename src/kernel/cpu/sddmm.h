@@ -136,14 +136,65 @@ template <typename IdType, typename DType, typename Op>
 void SDDMMBcastCsr(const BcastInfo& info,
                    const aten::CSRMatrix& csr,
                    NDArray ufeat, NDArray vfeat, NDArray out) {
-  LOG(FATAL) << "not implemented";
+  const bool has_idx = !aten::IsNullArray(csr.data);
+  const IdType* indptr = static_cast<IdType*>(csr.indptr->data);
+  const IdType* indices = static_cast<IdType*>(csr.indices->data);
+  const IdType* edges = has_idx?  static_cast<IdType*>(csr.data->data) : nullptr;
+  const DType* X = Op::use_lhs? static_cast<DType*>(ufeat->data) : nullptr;
+  const DType* Y = Op::use_rhs? static_cast<DType*>(vfeat->data) : nullptr;
+  int64_t dim = 1, lhs_dim = 1, rhs_dim = 1;
+  for (int i = 1; i < out->ndim; ++i) {
+    dim *= out->shape[i];
+    lhs_dim *= ufeat->shape[i];
+    rhs_dim *= vfeat->shape[i];
+  }
+  DType* O = static_cast<DType*>(out->data);
+#pragma omp parallel for
+  for (IdType rid = 0; rid < csr.num_rows; ++rid) {
+    const IdType row_start = indptr[rid], row_end = indptr[rid + 1];
+    for (IdType j = row_start; j < row_end; ++j) {
+      const IdType cid = indices[j];
+      const IdType eid = has_idx? edges[j] : j;
+      DType* out_off = O + eid * dim;
+      for (int64_t k = 0; k < dim; ++k) {
+        const DType* lhs_off = Op::use_lhs? X + rid * lhs_dim + info.lhs_offset[k] : nullptr;
+        const DType* rhs_off = Op::use_rhs? Y + cid * rhs_dim + info.rhs_offset[k] : nullptr;
+        out_off[k] = Op::Call(lhs_off, rhs_off);
+      }
+    }
+  }
 }
 
 template <typename IdType, typename DType, typename Op>
 void SDDMMBcastCoo(const BcastInfo& info,
                    const aten::COOMatrix& coo,
                    NDArray ufeat, NDArray vfeat, NDArray out) {
-  LOG(FATAL) << "not implemented";
+  const bool has_idx = !aten::IsNullArray(coo.data);
+  const IdType* row = static_cast<IdType*>(coo.row->data);
+  const IdType* col = static_cast<IdType*>(coo.col->data);
+  const IdType* edges = has_idx? static_cast<IdType*>(coo.data->data) : nullptr;
+  const DType* X = Op::use_lhs? static_cast<DType*>(ufeat->data) : nullptr;
+  const DType* Y = Op::use_rhs? static_cast<DType*>(vfeat->data) : nullptr;
+  int64_t dim = 1, lhs_dim = 1, rhs_dim = 1;
+  for (int i = 1; i < out->ndim; ++i) {
+    dim *= out->shape[i];
+    lhs_dim *= ufeat->shape[i];
+    rhs_dim *= vfeat->shape[i];
+  }
+  DType* O = static_cast<DType*>(out->data);
+  const int64_t nnz = coo.row->shape[0];
+#pragma omp parallel for
+  for (IdType i = 0; i < nnz; ++i) {
+    const IdType rid = row[i];
+    const IdType cid = col[i];
+    const IdType eid = has_idx? edges[i] : i;
+    DType* out_off = O + eid * dim;
+    for (int64_t k = 0; k < dim; ++k) {
+      const DType* lhs_off = Op::use_lhs? X + rid * lhs_dim + info.lhs_offset[k] : nullptr;
+      const DType* rhs_off = Op::use_rhs? Y + cid * rhs_dim + info.rhs_offset[k] : nullptr;
+      out_off[k] = Op::Call(lhs_off, rhs_off);
+    }
+  }
 }
 
 namespace op {

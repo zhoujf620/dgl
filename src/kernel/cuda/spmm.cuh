@@ -24,54 +24,6 @@ __device__ __forceinline__ T _ldg(T* addr) {
 #endif
 }
 
-/*
- * This func do the followings:
- *   1. Convert flattened index to multi-dimension index
- *      according to output shape (assume row-major).
- *   2. Convert multi-dimension index to flattened index for lhs.
- *   3. Convert multi-dimension index to flattened index for rhs.
- */
-__device__ __forceinline__ void UnravelRavel(
-    const int64_t idx, const int ndim, const int64_t* out_shape, const int64_t* out_len,
-    const int64_t* lhs_shape, const int64_t* lhs_stride,
-    const int64_t* rhs_shape, const int64_t* rhs_stride,
-    int64_t *lhs_out, int64_t *rhs_out) {
-  if (out_len[0] == lhs_stride[0]) {
-    for (int d = 0; d < ndim; ++d) {
-      int64_t o_sh = out_shape[d];
-      int64_t o_st = out_len[d];
-      int64_t rhs_sh = rhs_shape[d];
-      int64_t rhs_st = rhs_stride[d];
-      int64_t i = (idx / o_st) % o_sh;
-      /*
-       * Simplfied for rhs_out += min(i, rhs_sh - 1) * rhs_st;
-       * rhs_sh be o_sh or 1
-       */
-      if (rhs_sh > i) {
-        *rhs_out += i * rhs_st;
-      }
-    }
-    *lhs_out = idx;
-  } else {
-    for (int d = 0; d < ndim; ++d) {
-      int64_t o_sh = out_shape[d];
-      int64_t o_st = out_len[d];
-      int64_t lhs_sh = lhs_shape[d];
-      int64_t lhs_st = lhs_stride[d];
-
-      int64_t i = (idx / o_st) % o_sh;
-      /*
-       * Simplfied for lhs_out += min(i, lhs_sh - 1) * lhs_st;
-       * lhs_sh be o_sh or 1
-       */
-      if (lhs_sh > i) {
-        *lhs_out += i * lhs_st;
-      }
-    }
-    *rhs_out = idx;
-  }
-}
-
 template <typename Idx, typename DType,
           typename BinaryOp, typename ReduceOp>
 __global__ void SpMMCooKernel(
