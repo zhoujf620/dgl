@@ -5,11 +5,11 @@
 #ifndef DGL_KERNEL_CUDA_SPMM_CUH_
 #define DGL_KERNEL_CUDA_SPMM_CUH_
 
-#include "../../graph/unit_graph.h"
 #include "../utils.h"
 #include "../binary_reduce_impl_decl.h"
 #include "../binary_reduce.h"
 #include "atomic.cuh"
+#include "../../runtime/cuda/cuda_common.h"
 
 namespace dgl {
 namespace kernel {
@@ -22,54 +22,6 @@ __device__ __forceinline__ T _ldg(T* addr) {
 #else
   return *addr;
 #endif
-}
-
-/*
- * This func do the followings:
- *   1. Convert flattened index to multi-dimension index
- *      according to output shape (assume row-major).
- *   2. Convert multi-dimension index to flattened index for lhs.
- *   3. Convert multi-dimension index to flattened index for rhs.
- */
-__device__ __forceinline__ void UnravelRavel(
-    const int64_t idx, const int ndim, const int64_t* out_shape, const int64_t* out_len,
-    const int64_t* lhs_shape, const int64_t* lhs_stride,
-    const int64_t* rhs_shape, const int64_t* rhs_stride,
-    int64_t *lhs_out, int64_t *rhs_out) {
-  if (out_len[0] == lhs_stride[0]) {
-    for (int d = 0; d < ndim; ++d) {
-      int64_t o_sh = out_shape[d];
-      int64_t o_st = out_len[d];
-      int64_t rhs_sh = rhs_shape[d];
-      int64_t rhs_st = rhs_stride[d];
-      int64_t i = (idx / o_st) % o_sh;
-      /*
-       * Simplfied for rhs_out += min(i, rhs_sh - 1) * rhs_st;
-       * rhs_sh be o_sh or 1
-       */
-      if (rhs_sh > i) {
-        *rhs_out += i * rhs_st;
-      }
-    }
-    *lhs_out = idx;
-  } else {
-    for (int d = 0; d < ndim; ++d) {
-      int64_t o_sh = out_shape[d];
-      int64_t o_st = out_len[d];
-      int64_t lhs_sh = lhs_shape[d];
-      int64_t lhs_st = lhs_stride[d];
-
-      int64_t i = (idx / o_st) % o_sh;
-      /*
-       * Simplfied for lhs_out += min(i, lhs_sh - 1) * lhs_st;
-       * lhs_sh be o_sh or 1
-       */
-      if (lhs_sh > i) {
-        *lhs_out += i * lhs_st;
-      }
-    }
-    *rhs_out = idx;
-  }
 }
 
 template <typename Idx, typename DType,
@@ -90,16 +42,16 @@ __global__ void SpMMCooKernel(
     const Idx eid = has_idx ? _ldg(edge_map + ty) : ty;
     int64_t tx = blockIdx.x * blockDim.x + threadIdx.x;
     const int64_t stride_x = blockDim.x * gridDim.x;
-    DType* uoff = BinaryOp::UseLhs() ? (ufeat + src * ufeat_len): nullptr;
-    DType* eoff = BinaryOp::UseRhs() ? (efeat + eid * efeat_len): nullptr;
+    DType* uoff = BinaryOp::use_lhs ? (ufeat + src * ufeat_len): nullptr;
+    DType* eoff = BinaryOp::use_rhs ? (efeat + eid * efeat_len): nullptr;
     DType* outoff = out + dst * out_len;
-    Idx* arguoff = (ReduceOp::RequireArg() && BinaryOp::UseLhs()) ? (arg_u + dst * out_len): nullptr;
-    Idx* argeoff = (ReduceOp::RequireArg() && BinaryOp::UseRhs()) ? (arg_e + dst * out_len): nullptr;
     while (tx < out_len) {
       int64_t lhs_add = ubcast_off ? ubcast_off[tx] : tx;
       int64_t rhs_add = ebcast_off ? ebcast_off[tx] : tx;
       DType val = BinaryOp::Call(uoff + lhs_add, eoff + rhs_add);
-      ReduceOp::Call(tx, outoff, arguoff, argeoff, val, src, eid);
+      Idx* arguoff = (ReduceOp::require_arg && BinaryOp::use_lhs) ? (arg_u + dst * out_len + tx): nullptr;
+      Idx* argeoff = (ReduceOp::require_arg && BinaryOp::use_rhs) ? (arg_e + dst * out_len + tx): nullptr;
+      ReduceOp::Call(outoff + tx, arguoff, argeoff, val, src, eid);
       tx += stride_x;
     }
     ty += stride_y;
@@ -124,11 +76,11 @@ __global__ void ArgSpMMCooKernel(
     const Idx eid = has_idx ? _ldg(edge_map + ty) : ty;
     int64_t tx = blockIdx.x * blockDim.x + threadIdx.x;
     const int64_t stride_x = blockDim.x * gridDim.x;
-    DType* uoff = BinaryOp::UseLhs() ? (ufeat + src * ufeat_len): nullptr;
-    DType* eoff = BinaryOp::UseRhs() ? (efeat + eid * efeat_len): nullptr;
+    DType* uoff = BinaryOp::use_lhs ? (ufeat + src * ufeat_len): nullptr;
+    DType* eoff = BinaryOp::use_rhs ? (efeat + eid * efeat_len): nullptr;
     DType* outoff = out + dst * out_len;
-    Idx* arguoff = BinaryOp::UseLhs() ? (arg_u + dst * out_len): nullptr;
-    Idx* argeoff = BinaryOp::UseRhs() ? (arg_e + dst * out_len): nullptr;
+    Idx* arguoff = BinaryOp::use_lhs ? (arg_u + dst * out_len): nullptr;
+    Idx* argeoff = BinaryOp::use_rhs ? (arg_e + dst * out_len): nullptr;
     while (tx < out_len) {
       int64_t lhs_add = ubcast_off ? ubcast_off[tx] : tx;
       int64_t rhs_add = ebcast_off ? ebcast_off[tx] : tx;
@@ -143,34 +95,36 @@ __global__ void ArgSpMMCooKernel(
 template <typename Idx, typename DType,
           typename BinaryOp, typename ReduceOp>
 __global__ void SpMMCsrKernel(
-  DType *ufeat, DType *efeat, DType *out, Idx *arg_u, Idx *arg_e,
-  Idx *indptr, Idx *indices, Idx *edge_map,
-  int64_t N, int64_t M, int64_t E,
+  const DType *ufeat, const DType *efeat, DType *out, Idx *arg_u, Idx *arg_e,
+  const Idx *indptr, const Idx *indices, const Idx *edge_map,
+  int64_t num_rows, int64_t num_cols, int64_t nnz,
   int64_t *ubcast_off, int64_t *ebcast_off,
   int64_t ufeat_len, int64_t efeat_len, int64_t out_len) {
-  // SPMM with COO.
-  const bool has_idx = edge_map;
-  Idx ty = blockIdx.y * blockDim.y + threadIdx.y;
+  // SPMM with CSR.
+  int ty = blockIdx.y * blockDim.y + threadIdx.y;
   const Idx stride_y = blockDim.y * gridDim.y;
-  while (ty < M) {
-    const Idx dst = ty;
-    for (Idx i = indptr[dst]; i < indptr[dst + 1]; ++i) {
-      const Idx eid = has_idx ? _ldg(edge_map + i) : i;
-      const Idx src = i;
-      int64_t tx = blockIdx.x * blockDim.x + threadIdx.x;
-      const int64_t stride_x = blockDim.x * gridDim.x;
-      DType* uoff = BinaryOp::UseLhs() ? (ufeat + src * ufeat_len): nullptr;
-      DType* eoff = BinaryOp::UseRhs() ? (efeat + eid * efeat_len): nullptr;
-      DType* outoff = out + dst * out_len;
-      Idx* arguoff = (ReduceOp::RequireArg() && BinaryOp::UseLhs()) ? (arg_u + dst * out_len): nullptr;
-      Idx* argeoff = (ReduceOp::RequireArg() && BinaryOp::UseRhs()) ? (arg_e + dst * out_len): nullptr;
-      while (tx < out_len) {
-        int64_t lhs_add = ubcast_off ? ubcast_off[tx] : tx;
-        int64_t rhs_add = ebcast_off ? ebcast_off[tx] : tx;
+  const int stride_x = blockDim.x * gridDim.x;
+  while (ty < num_rows) {
+    int tx = blockIdx.x * blockDim.x + threadIdx.x;
+    while (tx < out_len) {
+      DType local_accum = ReduceOp::zero;
+      Idx local_argu = 0, local_arge = 0;
+      const int lhs_add = ubcast_off ? ubcast_off[tx] : tx;
+      const int rhs_add = ebcast_off ? ebcast_off[tx] : tx;
+      for (Idx i = indptr[ty]; i < indptr[ty + 1]; ++i) {
+        const Idx eid = edge_map ? _ldg(edge_map + i) : i;
+        const Idx cid = _ldg(indices + i);
+        const DType* uoff = BinaryOp::use_lhs ? (ufeat + cid * ufeat_len): nullptr;
+        const DType* eoff = BinaryOp::use_rhs ? (efeat + eid * efeat_len): nullptr;
         DType out = BinaryOp::Call(uoff + lhs_add, eoff + rhs_add);
-        ReduceOp::Call(tx, outoff, arguoff, argeoff, out, src, eid);
-        tx += stride_x;
+        ReduceOp::Call(&local_accum, &local_argu, &local_arge, out, cid, eid);
       }
+      out[ty * out_len + tx] = local_accum;
+      if (ReduceOp::require_arg && BinaryOp::use_lhs)
+        arg_u[ty * out_len + tx] = local_argu;
+      if (ReduceOp::require_arg && BinaryOp::use_rhs)
+        arg_e[ty * out_len + tx] = local_arge;
+      tx += stride_x;
     }
     ty += stride_y;
   }
@@ -191,7 +145,7 @@ void SpMMCoo(
         *out_data = static_cast<DType*>(out->data);
   Idx *argu_data = static_cast<Idx*>(argu->data),
       *arge_data = static_cast<Idx*>(arge->data);
-  cudaStream_t stream{nullptr};
+  auto* thr_entry = runtime::CUDAThreadEntry::ThreadLocal();
   int64_t N = coo.num_rows, M = coo.num_cols, E = efeat->shape[0];
 
   int64_t *ubcast_off = nullptr, *ebcast_off = nullptr;
@@ -203,16 +157,16 @@ void SpMMCoo(
   const dim3 nthrs(1, 32);
 
   SpMMCooKernel<Idx, DType, BinaryOp, ReduceOp>
-    <<<nblks, nthrs, 0, stream>>>(
+    <<<nblks, nthrs, 0, thr_entry->stream>>>(
       ufeat_data, efeat_data, out_data, argu_data, arge_data,
       row, col, edge_map,
       N, M, E,
       ubcast_off, ebcast_off,
       len, len, len
     );
-  if (ReduceOp::RequireArg()) {
+  if (ReduceOp::require_arg) {
     ArgSpMMCooKernel<Idx, DType, BinaryOp, ReduceOp>
-      <<<nblks, nthrs, 0, stream>>>(
+      <<<nblks, nthrs, 0, thr_entry->stream>>>(
         ufeat_data, efeat_data, out_data, argu_data, arge_data,
         row, col, edge_map,
         N, M, E,
@@ -257,7 +211,7 @@ void SpMMBcastCoo(
       ubcast_off, ebcast_off,
       ufeat_len, efeat_len, out_len
     );
-  if (ReduceOp::RequireArg()) {
+  if (ReduceOp::require_arg) {
     ArgSpMMCooKernel<Idx, DType, BinaryOp, ReduceOp>
       <<<nblks, nthrs, 0, stream>>>(
         ufeat_data, efeat_data, out_data, argu_data, arge_data,
@@ -275,38 +229,43 @@ void SpMMCsr(
     const dgl::aten::CSRMatrix& csr,
     NDArray ufeat, NDArray efeat,
     NDArray out, NDArray argu, NDArray arge) {
-  Idx *indptr = static_cast<Idx*>(csr.indptr->data),
-      *indices = static_cast<Idx*>(csr.indices->data), 
-      *edge_map = static_cast<Idx*>(csr.data->data);
-  DType *ufeat_data = static_cast<DType*>(ufeat->data),
-        *efeat_data = static_cast<DType*>(efeat->data),
-        *out_data = static_cast<DType*>(out->data);
-  Idx *argu_data = static_cast<Idx*>(argu->data),
-      *arge_data = static_cast<Idx*>(arge->data);
-  cudaStream_t stream{nullptr};
-  int64_t N = csr.num_rows, M = csr.num_cols, E = efeat->shape[0];
+  const Idx *indptr = static_cast<Idx*>(csr.indptr->data);
+  const Idx *indices = static_cast<Idx*>(csr.indices->data);
+  const Idx *edge_map = aten::IsNullArray(csr.data)? nullptr : static_cast<Idx*>(csr.data->data);
+  const DType *ufeat_data = aten::IsNullArray(ufeat)? nullptr : static_cast<DType*>(ufeat->data);
+  const DType *efeat_data = aten::IsNullArray(efeat)? nullptr : static_cast<DType*>(efeat->data);
+  DType *out_data = static_cast<DType*>(out->data);
+  Idx* argu_data = aten::IsNullArray(argu)? nullptr : static_cast<Idx*>(argu->data);
+  Idx* arge_data = aten::IsNullArray(arge)? nullptr : static_cast<Idx*>(arge->data);
+
+  auto* thr_entry = runtime::CUDAThreadEntry::ThreadLocal();
 
   int64_t *ubcast_off = nullptr, *ebcast_off = nullptr;
   // ComputeBcastOff(ubcast_off, ebast_off, info);
   int64_t len = 1;
-  for (int64_t i = 1; i < ufeat->ndim; ++i)
-    len *= ufeat->shape[i];
-  const dim3 nblks(N, 1);
-  const dim3 nthrs(1, 32);
+  for (int64_t i = 1; i < out->ndim; ++i)
+    len *= out->shape[i];
+
+  const int ntx = utils::FindNumThreads(len, 1024);
+  const int nty = 1024 / ntx;
+  const int nbx = (len + ntx - 1) / ntx;
+  const int nby = (csr.num_rows + nty - 1) / nty;
+  //LOG(INFO) << "nblks=(" << nbx << ", " << nby << ") nthrs=(" << ntx << ", " << nty << ")";
+  const dim3 nblks(nbx, nby);
+  const dim3 nthrs(ntx, nty);
 
   SpMMCsrKernel<Idx, DType, BinaryOp, ReduceOp>
-    <<<nblks, nthrs, 0, stream>>>(
+    <<<nblks, nthrs, 0, thr_entry->stream>>>(
       ufeat_data, efeat_data, out_data, argu_data, arge_data,
       indptr, indices, edge_map,
-      N, M, E,
+      csr.num_rows, csr.num_cols, efeat->shape[0],
       ubcast_off, ebcast_off,
       len, len, len
     );
 }
 
-
-}
-}
-}
+}  // namespace cuda
+}  // namespace kernel
+}  // namespace dgl
 
 #endif
