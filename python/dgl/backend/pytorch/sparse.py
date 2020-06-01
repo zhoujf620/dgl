@@ -118,11 +118,11 @@ class UMulEMax(th.autograd.Function):
             argY = argY.long()
         if ctx.needs_input_grad[1]:
             dX = th.zeros((X.shape[0],) + dZ.shape[1:], dtype=X.dtype, device=X.device)
-            dX.scatter_add_(0, argX, Y.gather(0, argY) * dZ)
+            dX.scatter_add_(0, argX, Y.expand(-1, *dZ.shape[1:]).gather(0, argY) * dZ)
             dX = _reduce_grad(dX, X.shape)
         if ctx.needs_input_grad[2]:
             dY = th.zeros((Y.shape[0],) + dZ.shape[1:], dtype=Y.dtype, device=Y.device)
-            dY.scatter_(0, argY, X.gather(0, argX) * dZ)
+            dY.scatter_(0, argY, X.expand(-1, *dZ.shape[1:]).gather(0, argX) * dZ)
             dY = _reduce_grad(dY, Y.shape)
         return None, dX, dY
 
