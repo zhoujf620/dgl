@@ -80,6 +80,7 @@ void SpMMBcastCsr(const std::string& op, const std::string& reduce,
   }
 }
 
+
 template void SpMMBcastCsr<kDLCPU, int32_t, float>(
     const std::string& op, const std::string& reduce,
     const BcastInfo& info,
@@ -153,8 +154,27 @@ void SpMMBcastCoo(const std::string& op, const std::string& reduce,
                   NDArray efeat,
                   NDArray out,
                   std::vector<NDArray> out_aux) {
-  // TODO
-  LOG(FATAL) << "Not implemented";
+  if (!aten::IsNullArray(ufeat))
+    CHECK_EQ(ufeat->shape[0], coo.num_cols);
+  if (!aten::IsNullArray(efeat))
+    CHECK_EQ(efeat->shape[0], coo.rows->shape[0]);
+  CHECK_EQ(out->shape[0], coo.num_rows);
+  if (reduce == "sum") {
+    SWITCH_OP(op, Op, {
+      cpu::SpMMBcastSumCoo<IdType, DType, Op>(info, coo, ufeat, efeat, out);
+    });
+  } else if (reduce == "max" || reduce == "min") {
+    SWITCH_OP(op, Op, {
+      if (reduce == "max")
+        cpu::SpMMBcastCmpCoo<IdType, DType, Op, cpu::op::Max<DType>>(
+            info, coo, ufeat, efeat, out, out_aux[0], out_aux[1]);
+      else
+        cpu::SpMMBcastCmpCoo<IdType, DType, Op, cpu::op::Min<DType>>(
+            info, coo, ufeat, efeat, out, out_aux[0], out_aux[1]);
+    });
+  } else {
+    LOG(FATAL) << "Unsupported SpMM reducer: " << reduce;
+  }
 }
 
 template void SpMMBcastCoo<kDLCPU, int32_t, float>(

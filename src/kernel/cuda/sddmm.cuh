@@ -244,8 +244,12 @@ void SDDMMCsr(
     reduce_dim = ufeat->shape[ufeat->ndim - 1];
   }
 
-  const dim3 nblks(E, 1);
-  const dim3 nthrs(1, (128 < len) ? 128 : len);
+  const int ntx = utils::FindNumThreads(len, 1024);
+  const int nty = 1024 / ntx;
+  const int nbx = (len + ntx - 1) / ntx;
+  const int nby = (E + nty - 1) / nty;
+  const dim3 nblks(nbx, nby);
+  const dim3 nthrs(ntx, nty);
 
   SDDMMCsrKernel<Idx, DType, Op>
     <<<nblks, nthrs, 0, thr_entry->stream>>>(
@@ -284,20 +288,21 @@ void SDDMMBcastCsr(
   CUDA_CALL(cudaMemcpy(vbcast_off, &info.rhs_offset[0],
     sizeof(int64_t) * info.rhs_offset.size(), cudaMemcpyHostToDevice));
 
-  int64_t len = 1, lhs_len = 1, rhs_len = 1;
-  for (size_t i = 1; i < info.out_shape.size(); ++i) {
-    len *= info.out_shape[i];
-    lhs_len *= info.lhs_shape[i];
-    rhs_len *= info.rhs_shape[i];
-  }
+  int64_t len = utils::Prod(info.out_shape),
+          lhs_len = utils::Prod(utils.lhs_shape),
+          rhs_len = utils::Prod(utils.rhs_shape);
   int64_t reduce_dim = 1;
   if (Op::reduce_last_dim) {
     CHECK(!aten::IsNullArray(ufeat));
     reduce_dim = ufeat->shape[ufeat->ndim - 1];
   }
 
-  const dim3 nblks(E, 1);
-  const dim3 nthrs(1, (128 < len) ? 128 : len);
+  const int ntx = utils::FindNumThreads(len, 1024);
+  const int nty = 1024 / ntx;
+  const int nbx = (len + ntx - 1) / ntx;
+  const int nby = (E + nty - 1) / nty;
+  const dim3 nblks(nbx, nby);
+  const dim3 nthrs(ntx, nty);
 
   SDDMMCsrKernel<Idx, DType, Op>
     <<<nblks, nthrs, 0, thr_entry->stream>>>(
