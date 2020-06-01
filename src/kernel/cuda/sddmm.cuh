@@ -129,7 +129,7 @@ void SDDMMCoo(
   DType *out_data = static_cast<DType*>(out->data);
   auto* thr_entry = runtime::CUDAThreadEntry::ThreadLocal();
 
-  int64_t *ubcast_off = nullptr, *ebcast_off = nullptr;
+  int64_t *ubcast_off = nullptr, *vbcast_off = nullptr;
   int64_t len = 1;
   for (int64_t i = 1; i < out->ndim; ++i)
     len *= out->shape[i];
@@ -154,7 +154,7 @@ void SDDMMCoo(
       ufeat_data, vfeat_data, out_data,
       row, col, edge_map,
       coo.num_rows, coo.num_cols, nnz, reduce_dim,
-      ubcast_off, ebcast_off,
+      ubcast_off, vbcast_off,
       len, len, len
     );
 }
@@ -180,14 +180,17 @@ void SDDMMBcastCoo(
     device->AllocWorkspace(ctx, sizeof(int64_t) * info.lhs_offset.size()));
   CUDA_CALL(cudaMemcpy(ubcast_off, &info.lhs_offset[0],
     sizeof(int64_t) * info.lhs_offset.size(), cudaMemcpyHostToDevice));
-  int64_t *ebcast_off = static_cast<int64_t*>(
+  int64_t *vbcast_off = static_cast<int64_t*>(
     device->AllocWorkspace(ctx, sizeof(int64_t) * info.rhs_offset.size()));
-  CUDA_CALL(cudaMemcpy(ebcast_off, &info.rhs_offset[0],
+  CUDA_CALL(cudaMemcpy(vbcast_off, &info.rhs_offset[0],
     sizeof(int64_t) * info.rhs_offset.size(), cudaMemcpyHostToDevice));
 
-  int64_t len = 1;
-  for (int64_t i = 1; i < out->ndim; ++i)
-    len *= out->shape[i];
+  int64_t len = 1, lhs_len = 1, rhs_len = 1;
+  for (int64_t i = 1; i < info.out_shape.size(); ++i) {
+    len *= info.out_shape[i];
+    lhs_len *= info.lhs_shape[i];
+    rhs_len *= info.rhs_shape[i];
+  }
   int64_t reduce_dim = 1;
   if (Op::reduce_last_dim) {
     CHECK(!aten::IsNullArray(ufeat));
@@ -209,15 +212,53 @@ void SDDMMBcastCoo(
       ufeat_data, vfeat_data, out_data,
       row, col, edge_map,
       coo.num_rows, coo.num_cols, nnz, reduce_dim,
-      ubcast_off, ebcast_off,
-      len, len, len
+      ubcast_off, vbcast_off,
+      lhs_len, rhs_len, len
     );
   device->FreeWorkspace(ctx, ubcast_off);
-  device->FreeWorkspace(ctx, ebcast_off);
+  device->FreeWorkspace(ctx, vbcast_off);
 }
 
 template <typename Idx, typename DType, typename Op>
 void SDDMMCsr(
+    const dgl::aten::CSRMatrix& csr,
+    NDArray ufeat,
+    NDArray vfeat,
+    NDArray out) {
+  const Idx *indptr = static_cast<Idx*>(csr.indptr->data);
+  const Idx *indices = static_cast<Idx*>(csr.indices->data);
+  const Idx *edge_map = aten::IsNullArray(csr.data)? nullptr : static_cast<Idx*>(csr.data->data);
+  const DType *ufeat_data = aten::IsNullArray(ufeat)? nullptr : static_cast<DType*>(ufeat->data);
+  const DType *vfeat_data = aten::IsNullArray(vfeat)? nullptr : static_cast<DType*>(vfeat->data);
+  DType *out_data = static_cast<DType*>(out->data);
+  auto* thr_entry = runtime::CUDAThreadEntry::ThreadLocal();
+  int64_t N = csr.num_rows, M = csr.num_cols, E = csr.indices->shape[0];
+
+  int64_t len = 1;
+  for (int64_t i = 1; i < ufeat->ndim; ++i)
+    len *= ufeat->shape[i];
+  int64_t reduce_dim = 1;
+  if (Op::reduce_last_dim) {
+    CHECK(!aten::IsNullArray(ufeat));
+    reduce_dim = ufeat->shape[ufeat->ndim - 1];
+  }
+
+  const dim3 nblks(E, 1);
+  const dim3 nthrs(1, (128 < len) ? 128 : len);
+
+  SDDMMCsrKernel<Idx, DType, Op>
+    <<<nblks, nthrs, 0, thr_entry->stream>>>(
+      ufeat_data, vfeat_data, out_data,
+      indptr, indices, edge_map,
+      N, M, E, reduce_dim,
+      ubcast_off, vbcast_off,
+      len, len, len
+    );
+}
+
+template <typename Idx, typename DType, typename Op>
+void SDDMMBcastCsr(
+    const BcastInfo& info,
     const dgl::aten::CSRMatrix& csr,
     NDArray ufeat,
     NDArray vfeat,
@@ -237,14 +278,23 @@ void SDDMMCsr(
     device->AllocWorkspace(ctx, sizeof(int64_t) * info.lhs_offset.size()));
   CUDA_CALL(cudaMemcpy(ubcast_off, &info.lhs_offset[0],
     sizeof(int64_t) * info.lhs_offset.size(), cudaMemcpyHostToDevice));
-  int64_t *ebcast_off = static_cast<int64_t*>(
+  int64_t *vbcast_off = static_cast<int64_t*>(
     device->AllocWorkspace(ctx, sizeof(int64_t) * info.rhs_offset.size()));
-  CUDA_CALL(cudaMemcpy(ebcast_off, &info.rhs_offset[0],
+  CUDA_CALL(cudaMemcpy(vbcast_off, &info.rhs_offset[0],
     sizeof(int64_t) * info.rhs_offset.size(), cudaMemcpyHostToDevice));
 
-  int64_t len = 1, reduce_size = 1;//ufeat->shape[ufeat->ndim - 1];
-  for (int64_t i = 1; i < ufeat->ndim; ++i)
-    len *= ufeat->shape[i];
+  int64_t len = 1, lhs_len = 1, rhs_len = 1;
+  for (int64_t i = 1; i < info.out_shape.size(); ++i) {
+    len *= info.out_shape[i];
+    lhs_len *= info.lhs_shape[i];
+    rhs_len *= info.rhs_shape[i];
+  }
+  int64_t reduce_dim = 1;
+  if (Op::reduce_last_dim) {
+    CHECK(!aten::IsNullArray(ufeat));
+    reduce_dim = ufeat->shape[ufeat->ndim - 1];
+  }
+
   const dim3 nblks(E, 1);
   const dim3 nthrs(1, (128 < len) ? 128 : len);
 
@@ -252,13 +302,13 @@ void SDDMMCsr(
     <<<nblks, nthrs, 0, thr_entry->stream>>>(
       ufeat_data, vfeat_data, out_data,
       indptr, indices, edge_map,
-      N, M, E, reduce_size,
-      ubcast_off, ebcast_off,
-      len, len, len
+      N, M, E, reduce_dim,
+      ubcast_off, vbcast_off,
+      lhs_len, rhs_len, len
     );
 
   device->FreeWorkspace(ctx, ubcast_off);
-  device->FreeWorkspace(ctx, ebcast_off);
+  device->FreeWorkspace(ctx, vbcast_off);
 }
 
 

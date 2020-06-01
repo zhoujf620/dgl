@@ -76,7 +76,7 @@ void SDDMMBcastCoo(const std::string& op,
                    NDArray out,
                    std::vector<NDArray> out_aux) {
   SWITCH_OP(op, Op, {
-    cuda::SDDMMBcastCoo<IdType, DType, Op>(info, csr, ufeat, vfeat, out);
+    cuda::SDDMMBcastCoo<IdType, DType, Op>(info, coo, ufeat, vfeat, out);
   });
 }
 
