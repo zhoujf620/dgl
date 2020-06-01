@@ -176,10 +176,12 @@ void SDDMMBcastCoo(
   
   DLContext ctx = ufeat->ctx;
   auto device = runtime::DeviceAPI::Get(ctx); 
-  int64_t *ubcast_off = device->AllocWorkspace(ctx, sizeof(int64_t) * info.lhs_offset.size());
+  int64_t *ubcast_off = static_cast<int64_t*>(
+    device->AllocWorkspace(ctx, sizeof(int64_t) * info.lhs_offset.size()));
   CUDA_CALL(cudaMemcpy(ubcast_off, &info.lhs_offset[0],
     sizeof(int64_t) * info.lhs_offset.size(), cudaMemcpyHostToDevice));
-  int64_t *ebcast_off = device->AllocWorkspace(ctx, sizeof(int64_t) * info.rhs_offset.size());
+  int64_t *ebcast_off = static_cast<int64_t*>(
+    device->AllocWorkspace(ctx, sizeof(int64_t) * info.rhs_offset.size()));
   CUDA_CALL(cudaMemcpy(ebcast_off, &info.rhs_offset[0],
     sizeof(int64_t) * info.rhs_offset.size(), cudaMemcpyHostToDevice));
 
@@ -231,10 +233,12 @@ void SDDMMCsr(
 
   DLContext ctx = ufeat->ctx;
   auto device = runtime::DeviceAPI::Get(ctx); 
-  int64_t *ubcast_off = device->AllocWorkspace(ctx, sizeof(int64_t) * info.lhs_offset.size());
+  int64_t *ubcast_off = static_cast<int64_t*>(
+    device->AllocWorkspace(ctx, sizeof(int64_t) * info.lhs_offset.size()));
   CUDA_CALL(cudaMemcpy(ubcast_off, &info.lhs_offset[0],
     sizeof(int64_t) * info.lhs_offset.size(), cudaMemcpyHostToDevice));
-  int64_t *ebcast_off = device->AllocWorkspace(ctx, sizeof(int64_t) * info.rhs_offset.size());
+  int64_t *ebcast_off = static_cast<int64_t*>(
+    device->AllocWorkspace(ctx, sizeof(int64_t) * info.rhs_offset.size()));
   CUDA_CALL(cudaMemcpy(ebcast_off, &info.rhs_offset[0],
     sizeof(int64_t) * info.rhs_offset.size(), cudaMemcpyHostToDevice));
 
