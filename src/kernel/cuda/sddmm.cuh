@@ -43,11 +43,13 @@ __global__ void SDDMMCooKernel(
     const int64_t stride_x = blockDim.x * gridDim.x;
     DType* lhsoff = BinaryOp::UseLhs() ? (ufeat + src * ufeat_len): nullptr;
     DType* rhsoff = BinaryOp::UseRhs() ? (vfeat + dst * vfeat_len): nullptr;
-    DType* outoff = out + dst * out_len;
+    DType* outoff = out + eid * out_len;
     while (tx < out_len) {
+      Idx lhs_add = ubcast_off ? ubcast_off[tx] : tx;
+      Idx rhs_add = vbcast_off ? vbcast_off[tx] : tx;
       DType val = BinaryOp::Call(
-          lhsoff + ubcast_off[tx] * reduce_size,
-          rhsoff + vbcast_off[tx] * reduce_size,
+          lhsoff + lhs_add * reduce_size,
+          rhsoff + rhs_add * reduce_size,
           reduce_size, reduce_size);
       outoff[tx] = val;
       tx += stride_x;
@@ -96,11 +98,13 @@ __global__ void SDDMMCsrKernel(
     const int64_t stride_x = blockDim.x * gridDim.x;
     DType* lhsoff = BinaryOp::UseLhs() ? (ufeat + src * ufeat_len): nullptr;
     DType* rhsoff = BinaryOp::UseRhs() ? (vfeat + dst * vfeat_len): nullptr;
-    DType* outoff = out + dst * out_len;
+    DType* outoff = out + eid * out_len;
     while (tx < out_len) {
+      Idx lhs_add = ubcast_off ? ubcast_off[tx] : tx;
+      Idx rhs_add = vbcast_off ? vbcast_off[tx] : tx;
       DType val = BinaryOp::Call(
-          lhsoff + ubcast_off[tx] * reduce_size,
-          rhsoff + vbcast_off[tx] * reduce_size,
+          lhsoff + lhs_add * reduce_size,
+          rhsoff + rhs_add * reduce_size,
           reduce_size, reduce_size);
       outoff[tx] = val;
       tx += stride_x;
@@ -126,11 +130,11 @@ void SDDMMCoo(
   int64_t N = coo.num_rows, M = coo.num_cols, E = coo.row->shape[0];
 
   int64_t *ubcast_off = nullptr, *ebcast_off = nullptr;
-  int64_t len = 1, reduce_size = ufeat->shape[ufeat->ndim - 1];
+  int64_t len = 1, reduce_size = 1;//ufeat->shape[ufeat->ndim - 1];
   for (int64_t i = 1; i < ufeat->ndim; ++i)
     len *= ufeat->shape[i];
   const dim3 nblks(E, 1);
-  const dim3 nthrs(1, 32);
+  const dim3 nthrs(1, (128 < len) ? 128 : len);
 
   SDDMMCooKernel<Idx, DType, Op>
     <<<nblks, nthrs, 0, stream>>>(
@@ -157,13 +161,15 @@ void SDDMMCsr(
         *out_data = static_cast<DType*>(out->data);
   cudaStream_t stream{nullptr};
   int64_t N = csr.num_rows, M = csr.num_cols, E = csr.indices->shape[0];
+  LOG(INFO) << N << " " << M << " " << E;
 
   int64_t *ubcast_off = nullptr, *ebcast_off = nullptr;
-  int64_t len = 1, reduce_size = ufeat->shape[ufeat->ndim - 1];
+  int64_t len = 1, reduce_size = 1;//ufeat->shape[ufeat->ndim - 1];
   for (int64_t i = 1; i < ufeat->ndim; ++i)
     len *= ufeat->shape[i];
   const dim3 nblks(E, 1);
-  const dim3 nthrs(1, 32);
+  const dim3 nthrs(1, (128 < len) ? 128 : len);
+  LOG(INFO) << len;
 
   SDDMMCsrKernel<Idx, DType, Op>
     <<<nblks, nthrs, 0, stream>>>(
