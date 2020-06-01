@@ -1,3 +1,6 @@
+#ifndef DGL_CUDA_KERNEL_FUCTORS2_H_
+#define DGL_CUDA_KERNEL_FUCTORS2_H_
+
 namespace dgl {
 namespace kernel {
 namespace cuda {
@@ -209,3 +212,5 @@ struct Min {
 }
 }
 }
+
+#endif
