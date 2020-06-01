@@ -157,7 +157,7 @@ void SpMMBcastCoo(const std::string& op, const std::string& reduce,
   if (!aten::IsNullArray(ufeat))
     CHECK_EQ(ufeat->shape[0], coo.num_cols);
   if (!aten::IsNullArray(efeat))
-    CHECK_EQ(efeat->shape[0], coo.rows->shape[0]);
+    CHECK_EQ(efeat->shape[0], coo.row->shape[0]);
   CHECK_EQ(out->shape[0], coo.num_rows);
   if (reduce == "sum") {
     SWITCH_OP(op, Op, {

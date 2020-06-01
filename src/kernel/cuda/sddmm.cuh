@@ -185,12 +185,9 @@ void SDDMMBcastCoo(
   CUDA_CALL(cudaMemcpy(vbcast_off, &info.rhs_offset[0],
     sizeof(int64_t) * info.rhs_offset.size(), cudaMemcpyHostToDevice));
 
-  int64_t len = 1, lhs_len = 1, rhs_len = 1;
-  for (size_t i = 1; i < info.out_shape.size(); ++i) {
-    len *= info.out_shape[i];
-    lhs_len *= info.lhs_shape[i];
-    rhs_len *= info.rhs_shape[i];
-  }
+  int64_t len = utils::Prod(info.out_shape),
+          lhs_len = utils::Prod(info.lhs_shape),
+          rhs_len = utils::Prod(info.rhs_shape);
   int64_t reduce_dim = 1;
   if (Op::reduce_last_dim) {
     CHECK(!aten::IsNullArray(ufeat));
@@ -289,8 +286,8 @@ void SDDMMBcastCsr(
     sizeof(int64_t) * info.rhs_offset.size(), cudaMemcpyHostToDevice));
 
   int64_t len = utils::Prod(info.out_shape),
-          lhs_len = utils::Prod(utils.lhs_shape),
-          rhs_len = utils::Prod(utils.rhs_shape);
+          lhs_len = utils::Prod(info.lhs_shape),
+          rhs_len = utils::Prod(info.rhs_shape);
   int64_t reduce_dim = 1;
   if (Op::reduce_last_dim) {
     CHECK(!aten::IsNullArray(ufeat));

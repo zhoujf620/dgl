@@ -153,8 +153,14 @@ void SpMMCoo(
   int64_t len = 1;
   for (int64_t i = 1; i < ufeat->ndim; ++i)
     len *= ufeat->shape[i];
-  const dim3 nblks(E, 1);
-  const dim3 nthrs(1, 32);
+
+  const int ntx = utils::FindNumThreads(len, 1024);
+  const int nty = 1024 / ntx;
+  const int nbx = (len + ntx - 1) / ntx;
+  const int nby = (E + nty - 1) / nty;
+  //LOG(INFO) << "nblks=(" << nbx << ", " << nby << ") nthrs=(" << ntx << ", " << nty << ")";
+  const dim3 nblks(nbx, nby);
+  const dim3 nthrs(ntx, nty);
 
   SpMMCooKernel<Idx, DType, BinaryOp, ReduceOp>
     <<<nblks, nthrs, 0, thr_entry->stream>>>(
@@ -179,10 +185,10 @@ void SpMMCoo(
 template <typename Idx, typename DType,
           typename BinaryOp, typename ReduceOp>
 void SpMMBcastCoo(
+    const BcastInfo& info,
     const dgl::aten::COOMatrix& coo,
     NDArray ufeat, NDArray efeat,
-    NDArray out, NDArray argu, NDArray arge,
-    BcastInfo info) {
+    NDArray out, NDArray argu, NDArray arge) {
   Idx *row = static_cast<Idx*>(coo.row->data),
       *col = static_cast<Idx*>(coo.col->data),
       *edge_map = aten::IsNullArray(coo.data) ?
@@ -195,17 +201,32 @@ void SpMMBcastCoo(
   auto* thr_entry = runtime::CUDAThreadEntry::ThreadLocal();
   int64_t N = coo.num_rows, M = coo.num_cols, E = efeat->shape[0];
 
-  int64_t *ubcast_off = nullptr, *ebcast_off = nullptr;
-  // ComputeBcastOff(ubcast_off, ebast_off, info);
+  DLContext ctx = ufeat->ctx;
+  auto device = runtime::DeviceAPI::Get(ctx); 
+  int64_t *ubcast_off = static_cast<int64_t*>(
+    device->AllocWorkspace(ctx, sizeof(int64_t) * info.lhs_offset.size()));
+  CUDA_CALL(cudaMemcpy(ubcast_off, &info.lhs_offset[0],
+    sizeof(int64_t) * info.lhs_offset.size(), cudaMemcpyHostToDevice));
+  int64_t *ebcast_off = static_cast<int64_t*>(
+    device->AllocWorkspace(ctx, sizeof(int64_t) * info.rhs_offset.size()));
+  CUDA_CALL(cudaMemcpy(ebcast_off, &info.rhs_offset[0],
+    sizeof(int64_t) * info.rhs_offset.size(), cudaMemcpyHostToDevice));
+
   int64_t ufeat_len = utils::Prod(info.lhs_shape);
   int64_t efeat_len = utils::Prod(info.rhs_shape);
   int64_t out_len = utils::Prod(info.out_shape);
-  const dim3 nblks(E, 1);
-  const dim3 nthrs(1, 32);
+
+  const int ntx = utils::FindNumThreads(out_len, 1024);
+  const int nty = 1024 / ntx;
+  const int nbx = (out_len + ntx - 1) / ntx;
+  const int nby = (E + nty - 1) / nty;
+  //LOG(INFO) << "nblks=(" << nbx << ", " << nby << ") nthrs=(" << ntx << ", " << nty << ")";
+  const dim3 nblks(nbx, nby);
+  const dim3 nthrs(ntx, nty);
 
   SpMMCooKernel<Idx, DType, BinaryOp, ReduceOp>
     <<<nblks, nthrs, 0, thr_entry->stream>>>(
-      ufeat_data, efeat_data, out_data,
+      ufeat_data, efeat_data, out_data, argu_data, arge_data,
       row, col, edge_map,
       N, M, E,
       ubcast_off, ebcast_off,
@@ -213,7 +234,7 @@ void SpMMBcastCoo(
     );
   if (ReduceOp::require_arg) {
     ArgSpMMCooKernel<Idx, DType, BinaryOp, ReduceOp>
-      <<<nblks, nthrs, 0, stream>>>(
+      <<<nblks, nthrs, 0, thr_entry->stream>>>(
         ufeat_data, efeat_data, out_data, argu_data, arge_data,
         row, col, edge_map,
         N, M, E,
@@ -221,6 +242,8 @@ void SpMMBcastCoo(
         ufeat_len, efeat_len, out_len
       );
   }
+  device->FreeWorkspace(ctx, ubcast_off);
+  device->FreeWorkspace(ctx, ebcast_off);
 }
 
 template <typename Idx, typename DType,
@@ -261,6 +284,58 @@ void SpMMCsr(
       ubcast_off, ebcast_off,
       len, len, len
     );
+}
+
+template <typename Idx, typename DType,
+          typename BinaryOp, typename ReduceOp>
+void SpMMBcastCsr(
+    const BcastInfo& info,
+    const dgl::aten::CSRMatrix& csr,
+    NDArray ufeat, NDArray efeat,
+    NDArray out, NDArray argu, NDArray arge) {
+  const Idx *indptr = static_cast<Idx*>(csr.indptr->data);
+  const Idx *indices = static_cast<Idx*>(csr.indices->data);
+  const Idx *edge_map = aten::IsNullArray(csr.data)? nullptr : static_cast<Idx*>(csr.data->data);
+  const DType *ufeat_data = aten::IsNullArray(ufeat)? nullptr : static_cast<DType*>(ufeat->data);
+  const DType *efeat_data = aten::IsNullArray(efeat)? nullptr : static_cast<DType*>(efeat->data);
+  DType *out_data = static_cast<DType*>(out->data);
+  Idx* argu_data = aten::IsNullArray(argu)? nullptr : static_cast<Idx*>(argu->data);
+  Idx* arge_data = aten::IsNullArray(arge)? nullptr : static_cast<Idx*>(arge->data);
+  auto* thr_entry = runtime::CUDAThreadEntry::ThreadLocal();
+
+  DLContext ctx = ufeat->ctx;
+  auto device = runtime::DeviceAPI::Get(ctx); 
+  int64_t *ubcast_off = static_cast<int64_t*>(
+    device->AllocWorkspace(ctx, sizeof(int64_t) * info.lhs_offset.size()));
+  CUDA_CALL(cudaMemcpy(ubcast_off, &info.lhs_offset[0],
+    sizeof(int64_t) * info.lhs_offset.size(), cudaMemcpyHostToDevice));
+  int64_t *ebcast_off = static_cast<int64_t*>(
+    device->AllocWorkspace(ctx, sizeof(int64_t) * info.rhs_offset.size()));
+  CUDA_CALL(cudaMemcpy(ebcast_off, &info.rhs_offset[0],
+    sizeof(int64_t) * info.rhs_offset.size(), cudaMemcpyHostToDevice));
+
+  int64_t len = utils::Prod(info.out_shape),
+          lhs_len = utils::Prod(info.lhs_shape),
+          rhs_len = utils::Prod(info.rhs_shape);
+
+  const int ntx = utils::FindNumThreads(len, 1024);
+  const int nty = 1024 / ntx;
+  const int nbx = (len + ntx - 1) / ntx;
+  const int nby = (csr.num_rows + nty - 1) / nty;
+  //LOG(INFO) << "nblks=(" << nbx << ", " << nby << ") nthrs=(" << ntx << ", " << nty << ")";
+  const dim3 nblks(nbx, nby);
+  const dim3 nthrs(ntx, nty);
+
+  SpMMCsrKernel<Idx, DType, BinaryOp, ReduceOp>
+    <<<nblks, nthrs, 0, thr_entry->stream>>>(
+      ufeat_data, efeat_data, out_data, argu_data, arge_data,
+      indptr, indices, edge_map,
+      csr.num_rows, csr.num_cols, efeat->shape[0],
+      ubcast_off, ebcast_off,
+      lhs_len, rhs_len, len
+    );
+  device->FreeWorkspace(ctx, ubcast_off);
+  device->FreeWorkspace(ctx, ebcast_off);
 }
 
 }  // namespace cuda
