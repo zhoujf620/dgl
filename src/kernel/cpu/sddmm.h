@@ -143,10 +143,10 @@ void SDDMMBcastCsr(const BcastInfo& info,
   const DType* X = Op::use_lhs? static_cast<DType*>(ufeat->data) : nullptr;
   const DType* Y = Op::use_rhs? static_cast<DType*>(vfeat->data) : nullptr;
   int64_t dim = 1, lhs_dim = 1, rhs_dim = 1;
-  for (int i = 1; i < out->ndim; ++i) {
-    dim *= out->shape[i];
-    lhs_dim *= ufeat->shape[i];
-    rhs_dim *= vfeat->shape[i];
+  for (size_t i = 0; i < info.out_shape.size(); ++i) {
+    dim *= info.out_shape[i];
+    lhs_dim *= info.lhs_shape[i];
+    rhs_dim *= info.rhs_shape[i];
   }
   DType* O = static_cast<DType*>(out->data);
 #pragma omp parallel for
@@ -176,10 +176,10 @@ void SDDMMBcastCoo(const BcastInfo& info,
   const DType* X = Op::use_lhs? static_cast<DType*>(ufeat->data) : nullptr;
   const DType* Y = Op::use_rhs? static_cast<DType*>(vfeat->data) : nullptr;
   int64_t dim = 1, lhs_dim = 1, rhs_dim = 1;
-  for (int i = 1; i < out->ndim; ++i) {
-    dim *= out->shape[i];
-    lhs_dim *= ufeat->shape[i];
-    rhs_dim *= vfeat->shape[i];
+  for (size_t i = 0; i < info.out_shape.size(); ++i) {
+    dim *= info.out_shape[i];
+    lhs_dim *= info.lhs_shape[i];
+    rhs_dim *= info.rhs_shape[i];
   }
   DType* O = static_cast<DType*>(out->data);
   const int64_t nnz = coo.row->shape[0];
