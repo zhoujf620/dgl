@@ -93,13 +93,13 @@ __global__ void SpMMCooKernel(
     DType* uoff = BinaryOp::UseLhs() ? (ufeat + src * ufeat_len): nullptr;
     DType* eoff = BinaryOp::UseRhs() ? (efeat + eid * efeat_len): nullptr;
     DType* outoff = out + dst * out_len;
-    Idx* arguoff = (ReduceOp::RequireArg() && BinaryOp::UseLhs()) ? (arg_u + dst * out_len): nullptr;
-    Idx* argeoff = (ReduceOp::RequireArg() && BinaryOp::UseRhs()) ? (arg_e + dst * out_len): nullptr;
     while (tx < out_len) {
       int64_t lhs_add = ubcast_off ? ubcast_off[tx] : tx;
       int64_t rhs_add = ebcast_off ? ebcast_off[tx] : tx;
       DType val = BinaryOp::Call(uoff + lhs_add, eoff + rhs_add);
-      ReduceOp::Call(tx, outoff, arguoff, argeoff, val, src, eid);
+      Idx* arguoff = (ReduceOp::RequireArg() && BinaryOp::UseLhs()) ? (arg_u + dst * out_len + tx): nullptr;
+      Idx* argeoff = (ReduceOp::RequireArg() && BinaryOp::UseRhs()) ? (arg_e + dst * out_len + tx): nullptr;
+      ReduceOp::Call(outoff + tx, arguoff, argeoff, val, src, eid);
       tx += stride_x;
     }
     ty += stride_y;
@@ -161,14 +161,15 @@ __global__ void SpMMCsrKernel(
       const DType* uoff = BinaryOp::UseLhs() ? (ufeat + src * ufeat_len): nullptr;
       const DType* eoff = BinaryOp::UseRhs() ? (efeat + eid * efeat_len): nullptr;
       DType* outoff = out + ty * out_len;
-      Idx* arguoff = (ReduceOp::RequireArg() && BinaryOp::UseLhs()) ? (arg_u + ty * out_len): nullptr;
-      Idx* argeoff = (ReduceOp::RequireArg() && BinaryOp::UseRhs()) ? (arg_e + ty * out_len): nullptr;
       while (tx < out_len) {
-        int64_t lhs_add = ubcast_off ? ubcast_off[tx] : tx;
-        int64_t rhs_add = ebcast_off ? ebcast_off[tx] : tx;
+        const int64_t lhs_add = ubcast_off ? ubcast_off[tx] : tx;
+        const int64_t rhs_add = ebcast_off ? ebcast_off[tx] : tx;
         DType out = BinaryOp::Call(uoff + lhs_add, eoff + rhs_add);
-        outoff[tx] += out;
-        //ReduceOp::Call(tx, outoff, arguoff, argeoff, out, src, eid);
+        Idx* arguoff = (ReduceOp::RequireArg() && BinaryOp::UseLhs()) ?
+          (arg_u + ty * out_len + tx): nullptr;
+        Idx* argeoff = (ReduceOp::RequireArg() && BinaryOp::UseRhs()) ?
+          (arg_e + ty * out_len + tx): nullptr;
+        ReduceOp::Call(outoff + tx, arguoff, argeoff, out, src, eid);
         tx += stride_x;
       }
     }

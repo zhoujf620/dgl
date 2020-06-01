@@ -115,13 +115,13 @@ template <typename Idx,
           typename DType,
           bool atomic=false>
 struct Sum {
-  static __device__ __forceinline__ void Call(Idx fid,
+  static __device__ __forceinline__ void Call(
     DType *out_buf, Idx *arg_u_buf, Idx *arg_e_buf,
     DType val, Idx uid, Idx eid) {
     if (!atomic) {
-      out_buf[fid] += val;
+      *out_buf += val;
     } else {
-      cuda::AtomicAdd(out_buf + fid, val);
+      cuda::AtomicAdd(out_buf, val);
     }
   }
   static __device__ __forceinline__ bool RequireArg() {
@@ -138,18 +138,17 @@ template <typename Idx,
           typename DType,
           bool atomic=false>
 struct Max {
-  static __device__ __forceinline__ void Call(Idx fid,
+  static __device__ __forceinline__ void Call(
     DType *out_buf, Idx *arg_u_buf, Idx *arg_e_buf,
     DType val, Idx uid, Idx eid) {
     if (!atomic) {
-      Idx max_val = max(out_buf[fid], val);
-      if (max_val == val) {
-        out_buf[fid] = max_val;
-        arg_u_buf[fid] = uid;
-        arg_e_buf[fid] = eid;
+      if (*out_buf < val) {
+        *out_buf = val;
+        *arg_u_buf = uid;
+        *arg_e_buf = eid;
       }
     } else {
-      cuda::AtomicMax(out_buf + fid, val);
+      cuda::AtomicMax(out_buf, val);
     }
   }
   static __device__ __forceinline__ bool RequireArg() {
@@ -173,18 +172,17 @@ template <typename Idx,
           typename DType,
           bool atomic=false>
 struct Min {
-  static __device__ __forceinline__ void Call(Idx fid,
+  static __device__ __forceinline__ void Call(
     DType *out_buf, Idx *arg_u_buf, Idx *arg_e_buf,
     DType val, Idx uid, Idx eid) {
     if (!atomic) {
-      Idx min_val = min(out_buf[fid], val);
-      if (min_val == val) {
-        out_buf[fid] = min_val;
-        arg_u_buf[fid] = uid;
-        arg_e_buf[fid] = eid;
+      if (*out_buf > val) {
+        *out_buf = val;
+        *arg_u_buf = uid;
+        *arg_e_buf = eid;
       }
     } else {
-      cuda::AtomicMin(out_buf + fid, val);
+      cuda::AtomicMin(out_buf, val);
     }
   }
   static __device__ __forceinline__ bool RequireArg() {
