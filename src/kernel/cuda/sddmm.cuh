@@ -39,8 +39,10 @@ __global__ void SDDMMCooKernel(
     const Idx src = _ldg(row + ty);
     const Idx dst = _ldg(col + ty);
     const Idx eid = edge_map ? _ldg(edge_map + ty) : ty;
-    const DType* lhsoff = BinaryOp::use_lhs ? (ufeat + src * ufeat_len): nullptr;
-    const DType* rhsoff = BinaryOp::use_rhs ? (vfeat + dst * vfeat_len): nullptr;
+    const DType* lhsoff = BinaryOp::use_lhs ?
+      (ufeat + src * ufeat_len * reduce_size): nullptr;
+    const DType* rhsoff = BinaryOp::use_rhs ?
+      (vfeat + dst * vfeat_len * reduce_size): nullptr;
     DType* outoff = out + eid * out_len;
     int tx = blockIdx.x * blockDim.x + threadIdx.x;
     const int stride_x = blockDim.x * gridDim.x;
@@ -143,8 +145,7 @@ void SDDMMCoo(
   const int nty = 1024 / ntx;
   const int nbx = (len + ntx - 1) / ntx;
   const int nby = (nnz + nty - 1) / nty;
-  LOG(INFO) << "nblks=(" << nbx << ", " << nby << ") nthrs=(" << ntx << ", " << nty << ")";
-  LOG(INFO) << "out_len=" << len;
+  //LOG(INFO) << "nblks=(" << nbx << ", " << nby << ") nthrs=(" << ntx << ", " << nty << ")";
   const dim3 nblks(nbx, nby);
   const dim3 nthrs(ntx, nty);
 
