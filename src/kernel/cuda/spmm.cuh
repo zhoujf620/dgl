@@ -150,28 +150,30 @@ __global__ void SpMMCsrKernel(
   int64_t ufeat_len, int64_t efeat_len, int64_t out_len) {
   // SPMM with CSR.
   const bool has_idx = edge_map;
-  Idx ty = blockIdx.y * blockDim.y + threadIdx.y;
+  int ty = blockIdx.y * blockDim.y + threadIdx.y;
   const Idx stride_y = blockDim.y * gridDim.y;
+  const int stride_x = blockDim.x * gridDim.x;
   while (ty < num_rows) {
-    for (Idx i = indptr[ty]; i < indptr[ty + 1]; ++i) {
-      const Idx eid = has_idx ? _ldg(edge_map + i) : i;
-      const Idx src = _ldg(indices + i);
-      int64_t tx = blockIdx.x * blockDim.x + threadIdx.x;
-      const int64_t stride_x = blockDim.x * gridDim.x;
-      const DType* uoff = BinaryOp::UseLhs() ? (ufeat + src * ufeat_len): nullptr;
-      const DType* eoff = BinaryOp::UseRhs() ? (efeat + eid * efeat_len): nullptr;
-      DType* outoff = out + ty * out_len;
-      while (tx < out_len) {
-        const int64_t lhs_add = ubcast_off ? ubcast_off[tx] : tx;
-        const int64_t rhs_add = ebcast_off ? ebcast_off[tx] : tx;
+    int tx = blockIdx.x * blockDim.x + threadIdx.x;
+    while (tx < out_len) {
+      DType local_accum = ReduceOp::zero;
+      Idx local_argu = 0, local_arge = 0;
+      const int lhs_add = ubcast_off ? ubcast_off[tx] : tx;
+      const int rhs_add = ebcast_off ? ebcast_off[tx] : tx;
+      for (Idx i = indptr[ty]; i < indptr[ty + 1]; ++i) {
+        const Idx eid = has_idx ? _ldg(edge_map + i) : i;
+        const Idx cid = _ldg(indices + i);
+        const DType* uoff = BinaryOp::UseLhs() ? (ufeat + cid * ufeat_len): nullptr;
+        const DType* eoff = BinaryOp::UseRhs() ? (efeat + eid * efeat_len): nullptr;
         DType out = BinaryOp::Call(uoff + lhs_add, eoff + rhs_add);
-        Idx* arguoff = (ReduceOp::RequireArg() && BinaryOp::UseLhs()) ?
-          (arg_u + ty * out_len + tx): nullptr;
-        Idx* argeoff = (ReduceOp::RequireArg() && BinaryOp::UseRhs()) ?
-          (arg_e + ty * out_len + tx): nullptr;
-        ReduceOp::Call(outoff + tx, arguoff, argeoff, out, src, eid);
-        tx += stride_x;
+        ReduceOp::Call(&local_accum, &local_argu, &local_arge, out, cid, eid);
       }
+      out[ty * out_len + tx] = local_accum;
+      if (ReduceOp::RequireArg() && BinaryOp::UseLhs())
+        arg_u[ty * out_len + tx] = local_argu;
+      if (ReduceOp::RequireArg() && BinaryOp::UseRhs())
+        arg_e[ty * out_len + tx] = local_arge;
+      tx += stride_x;
     }
     ty += stride_y;
   }

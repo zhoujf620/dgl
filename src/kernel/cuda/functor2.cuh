@@ -115,6 +115,7 @@ template <typename Idx,
           typename DType,
           bool atomic=false>
 struct Sum {
+  static constexpr DType zero = 0;
   static __device__ __forceinline__ void Call(
     DType *out_buf, Idx *arg_u_buf, Idx *arg_e_buf,
     DType val, Idx uid, Idx eid) {
@@ -138,6 +139,7 @@ template <typename Idx,
           typename DType,
           bool atomic=false>
 struct Max {
+  static constexpr DType zero = std::numeric_limits<DType>::lowest();
   static __device__ __forceinline__ void Call(
     DType *out_buf, Idx *arg_u_buf, Idx *arg_e_buf,
     DType val, Idx uid, Idx eid) {
@@ -172,6 +174,7 @@ template <typename Idx,
           typename DType,
           bool atomic=false>
 struct Min {
+  static constexpr DType zero = std::numeric_limits<DType>::max();
   static __device__ __forceinline__ void Call(
     DType *out_buf, Idx *arg_u_buf, Idx *arg_e_buf,
     DType val, Idx uid, Idx eid) {
