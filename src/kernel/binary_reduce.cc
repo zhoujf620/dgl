@@ -267,6 +267,27 @@ BcastInfo CalcBcastInfo(const std::string& op, NDArray lhs, NDArray rhs) {
   ret.lhs_stride = ComputeStride(ret.lhs_shape);
   ret.rhs_stride = ComputeStride(ret.rhs_shape);
   ret.out_stride = ComputeStride(ret.out_shape);
+  int len = 1;
+  for (int d = 0; d < max_ndim; ++d)
+    len *= ret.out_shape[d];
+  ret.lhs_offset.resize(len, 0);
+  ret.rhs_offset.resize(len, 0);
+  // Compute bcast offset
+  for (int d = 0; d < max_ndim; ++d) {
+    int64_t o_sh = ret.out_shape[d];
+    int64_t o_st = ret.out_stride[d];
+    int64_t rhs_sh = ret.rhs_shape[d];
+    int64_t rhs_st = ret.rhs_stride[d];
+    int64_t lhs_sh = ret.lhs_shape[d];
+    int64_t lhs_st = ret.lhs_stride[d];
+    for (int idx = 0; idx < len; ++idx) {
+      int64_t i = (idx / o_st) % o_sh;
+      if (rhs_sh > i)
+        ret.rhs_offset[idx] += i * rhs_st;
+      if (lhs_sh > i)
+        ret.lhs_offset[idx] += i * lhs_st;
+    }
+  }
   return ret;
 }
 
