@@ -192,7 +192,7 @@ void SpMMBcastCoo(
         *out_data = static_cast<DType*>(out->data);
   Idx *argu_data = static_cast<Idx*>(argu->data),
       *arge_data = static_cast<Idx*>(arge->data);
-  cudaStream_t stream{nullptr};
+  auto* thr_entry = runtime::CUDAThreadEntry::ThreadLocal();
   int64_t N = coo.num_rows, M = coo.num_cols, E = efeat->shape[0];
 
   int64_t *ubcast_off = nullptr, *ebcast_off = nullptr;
@@ -204,7 +204,7 @@ void SpMMBcastCoo(
   const dim3 nthrs(1, 32);
 
   SpMMCooKernel<Idx, DType, BinaryOp, ReduceOp>
-    <<<nblks, nthrs, 0, stream>>>(
+    <<<nblks, nthrs, 0, thr_entry->stream>>>(
       ufeat_data, efeat_data, out_data,
       row, col, edge_map,
       N, M, E,
@@ -241,7 +241,6 @@ void SpMMCsr(
   auto* thr_entry = runtime::CUDAThreadEntry::ThreadLocal();
 
   int64_t *ubcast_off = nullptr, *ebcast_off = nullptr;
-  // ComputeBcastOff(ubcast_off, ebast_off, info);
   int64_t len = 1;
   for (int64_t i = 1; i < out->ndim; ++i)
     len *= out->shape[i];
