@@ -3,6 +3,7 @@
 from collections import defaultdict
 from contextlib import contextmanager
 import copy
+import os
 import networkx as nx
 import numpy as np
 
@@ -4802,5 +4803,9 @@ def apply_edges2(self, func, edges=ALL, etype=None):
         Z = op(gidx, X)
     eframe[func.out_field] = Z
 
-DGLHeteroGraph.update_all2 = update_all2
-DGLHeteroGraph.apply_edges2 = apply_edges2
+if os.environ.get('DGL_USE_NEW_KERNEL', False):
+    DGLHeteroGraph.update_all = update_all2
+    DGLHeteroGraph.apply_edges = apply_edges2
+else:
+    DGLHeteroGraph.update_all2 = update_all2
+    DGLHeteroGraph.apply_edges2 = apply_edges2
