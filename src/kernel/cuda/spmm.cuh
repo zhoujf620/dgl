@@ -90,15 +90,15 @@ __global__ void SpMMCooKernel(
     const Idx eid = has_idx ? _ldg(edge_map + ty) : ty;
     int64_t tx = blockIdx.x * blockDim.x + threadIdx.x;
     const int64_t stride_x = blockDim.x * gridDim.x;
-    DType* uoff = BinaryOp::UseLhs() ? (ufeat + src * ufeat_len): nullptr;
-    DType* eoff = BinaryOp::UseRhs() ? (efeat + eid * efeat_len): nullptr;
+    DType* uoff = BinaryOp::use_lhs ? (ufeat + src * ufeat_len): nullptr;
+    DType* eoff = BinaryOp::use_rhs ? (efeat + eid * efeat_len): nullptr;
     DType* outoff = out + dst * out_len;
     while (tx < out_len) {
       int64_t lhs_add = ubcast_off ? ubcast_off[tx] : tx;
       int64_t rhs_add = ebcast_off ? ebcast_off[tx] : tx;
       DType val = BinaryOp::Call(uoff + lhs_add, eoff + rhs_add);
-      Idx* arguoff = (ReduceOp::RequireArg() && BinaryOp::UseLhs()) ? (arg_u + dst * out_len + tx): nullptr;
-      Idx* argeoff = (ReduceOp::RequireArg() && BinaryOp::UseRhs()) ? (arg_e + dst * out_len + tx): nullptr;
+      Idx* arguoff = (ReduceOp::require_arg && BinaryOp::use_lhs) ? (arg_u + dst * out_len + tx): nullptr;
+      Idx* argeoff = (ReduceOp::require_arg && BinaryOp::use_rhs) ? (arg_e + dst * out_len + tx): nullptr;
       ReduceOp::Call(outoff + tx, arguoff, argeoff, val, src, eid);
       tx += stride_x;
     }
@@ -124,11 +124,11 @@ __global__ void ArgSpMMCooKernel(
     const Idx eid = has_idx ? _ldg(edge_map + ty) : ty;
     int64_t tx = blockIdx.x * blockDim.x + threadIdx.x;
     const int64_t stride_x = blockDim.x * gridDim.x;
-    DType* uoff = BinaryOp::UseLhs() ? (ufeat + src * ufeat_len): nullptr;
-    DType* eoff = BinaryOp::UseRhs() ? (efeat + eid * efeat_len): nullptr;
+    DType* uoff = BinaryOp::use_lhs ? (ufeat + src * ufeat_len): nullptr;
+    DType* eoff = BinaryOp::use_rhs ? (efeat + eid * efeat_len): nullptr;
     DType* outoff = out + dst * out_len;
-    Idx* arguoff = BinaryOp::UseLhs() ? (arg_u + dst * out_len): nullptr;
-    Idx* argeoff = BinaryOp::UseRhs() ? (arg_e + dst * out_len): nullptr;
+    Idx* arguoff = BinaryOp::use_lhs ? (arg_u + dst * out_len): nullptr;
+    Idx* argeoff = BinaryOp::use_rhs ? (arg_e + dst * out_len): nullptr;
     while (tx < out_len) {
       int64_t lhs_add = ubcast_off ? ubcast_off[tx] : tx;
       int64_t rhs_add = ebcast_off ? ebcast_off[tx] : tx;
@@ -149,7 +149,6 @@ __global__ void SpMMCsrKernel(
   int64_t *ubcast_off, int64_t *ebcast_off,
   int64_t ufeat_len, int64_t efeat_len, int64_t out_len) {
   // SPMM with CSR.
-  const bool has_idx = edge_map;
   int ty = blockIdx.y * blockDim.y + threadIdx.y;
   const Idx stride_y = blockDim.y * gridDim.y;
   const int stride_x = blockDim.x * gridDim.x;
@@ -161,17 +160,17 @@ __global__ void SpMMCsrKernel(
       const int lhs_add = ubcast_off ? ubcast_off[tx] : tx;
       const int rhs_add = ebcast_off ? ebcast_off[tx] : tx;
       for (Idx i = indptr[ty]; i < indptr[ty + 1]; ++i) {
-        const Idx eid = has_idx ? _ldg(edge_map + i) : i;
+        const Idx eid = edge_map ? _ldg(edge_map + i) : i;
         const Idx cid = _ldg(indices + i);
-        const DType* uoff = BinaryOp::UseLhs() ? (ufeat + cid * ufeat_len): nullptr;
-        const DType* eoff = BinaryOp::UseRhs() ? (efeat + eid * efeat_len): nullptr;
+        const DType* uoff = BinaryOp::use_lhs ? (ufeat + cid * ufeat_len): nullptr;
+        const DType* eoff = BinaryOp::use_rhs ? (efeat + eid * efeat_len): nullptr;
         DType out = BinaryOp::Call(uoff + lhs_add, eoff + rhs_add);
         ReduceOp::Call(&local_accum, &local_argu, &local_arge, out, cid, eid);
       }
       out[ty * out_len + tx] = local_accum;
-      if (ReduceOp::RequireArg() && BinaryOp::UseLhs())
+      if (ReduceOp::require_arg && BinaryOp::use_lhs)
         arg_u[ty * out_len + tx] = local_argu;
-      if (ReduceOp::RequireArg() && BinaryOp::UseRhs())
+      if (ReduceOp::require_arg && BinaryOp::use_rhs)
         arg_e[ty * out_len + tx] = local_arge;
       tx += stride_x;
     }
@@ -213,7 +212,7 @@ void SpMMCoo(
       ubcast_off, ebcast_off,
       len, len, len
     );
-  if (ReduceOp::RequireArg()) {
+  if (ReduceOp::require_arg) {
     ArgSpMMCooKernel<Idx, DType, BinaryOp, ReduceOp>
       <<<nblks, nthrs, 0, thr_entry->stream>>>(
         ufeat_data, efeat_data, out_data, argu_data, arge_data,
@@ -260,7 +259,7 @@ void SpMMBcastCoo(
       ubcast_off, ebcast_off,
       ufeat_len, efeat_len, out_len
     );
-  if (ReduceOp::RequireArg()) {
+  if (ReduceOp::require_arg) {
     ArgSpMMCooKernel<Idx, DType, BinaryOp, ReduceOp>
       <<<nblks, nthrs, 0, stream>>>(
         ufeat_data, efeat_data, out_data, argu_data, arge_data,
@@ -281,8 +280,8 @@ void SpMMCsr(
   const Idx *indptr = static_cast<Idx*>(csr.indptr->data);
   const Idx *indices = static_cast<Idx*>(csr.indices->data);
   const Idx *edge_map = aten::IsNullArray(csr.data)? nullptr : static_cast<Idx*>(csr.data->data);
-  const DType *ufeat_data = static_cast<DType*>(ufeat->data);
-  const DType *efeat_data = static_cast<DType*>(efeat->data);
+  const DType *ufeat_data = aten::IsNullArray(ufeat)? nullptr : static_cast<DType*>(ufeat->data);
+  const DType *efeat_data = aten::IsNullArray(efeat)? nullptr : static_cast<DType*>(efeat->data);
   DType *out_data = static_cast<DType*>(out->data);
   Idx* argu_data = aten::IsNullArray(argu)? nullptr : static_cast<Idx*>(argu->data);
   Idx* arge_data = aten::IsNullArray(arge)? nullptr : static_cast<Idx*>(arge->data);
@@ -292,10 +291,16 @@ void SpMMCsr(
   int64_t *ubcast_off = nullptr, *ebcast_off = nullptr;
   // ComputeBcastOff(ubcast_off, ebast_off, info);
   int64_t len = 1;
-  for (int64_t i = 1; i < ufeat->ndim; ++i)
+  for (int64_t i = 1; i < out->ndim; ++i)
     len *= out->shape[i];
-  const dim3 nblks(csr.num_rows, 1);
-  const dim3 nthrs(1, utils::FindNumThreads(len, 1024));
+
+  const int ntx = utils::FindNumThreads(len, 1024);
+  const int nty = 1024 / ntx;
+  const int nbx = (len + ntx - 1) / ntx;
+  const int nby = (csr.num_rows + nty - 1) / nty;
+  //LOG(INFO) << "nblks=(" << nbx << ", " << nby << ") nthrs=(" << ntx << ", " << nty << ")";
+  const dim3 nblks(nbx, nby);
+  const dim3 nthrs(ntx, nty);
 
   SpMMCsrKernel<Idx, DType, BinaryOp, ReduceOp>
     <<<nblks, nthrs, 0, thr_entry->stream>>>(
