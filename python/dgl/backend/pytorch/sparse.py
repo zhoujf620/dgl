@@ -385,7 +385,17 @@ class UDotV(th.autograd.Function):
 
     @staticmethod
     def backward(ctx, dZ):
-        return UMulV.backward(ctx, dZ)
+        g = ctx.backward_cache
+        X, Y = ctx.saved_tensors
+        dX, dY = None, None
+        if ctx.needs_input_grad[1]:
+            dX = u_mul_e_sum(g.reverse(), Y, dZ)
+            dX = _reduce_grad(dX, X.shape)
+        if ctx.needs_input_grad[2]:
+            dY = u_mul_e_sum(g, X, dZ)
+            dY = _reduce_grad(dY, Y.shape)
+        return None, dX, dY
+        #return UMulV.backward(ctx, dZ)
 
 copy_e_sum = CopyESum.apply
 copy_e_max = CopyEMax.apply
