@@ -174,6 +174,7 @@ cublasStatus_t Xgeam<double>(cublasHandle_t handle, cublasOperation_t transa,
 
 template <typename DType>
 void CusparseCsrmm2(
+    const DLContext& ctx,
     const RuntimeConfig& rtcfg,
     const aten::CSRMatrix& csr,
     const DType* B_data, DType* C_data,
@@ -192,18 +193,18 @@ void CusparseCsrmm2(
   const DType alpha = 1.0;
   const DType beta = 0.0;
   // device
-  auto device = runtime::DeviceAPI::Get(rtcfg.ctx);
+  auto device = runtime::DeviceAPI::Get(ctx);
   auto* thr_entry = runtime::CUDAThreadEntry::ThreadLocal();
   // allocate cusparse handle if needed
   if (!thr_entry->cusparse_handle) {
     CUSPARSE_CALL(cusparseCreate(&(thr_entry->cusparse_handle)));
   }
-  CUSPARSE_CALL(cusparseSetStream(thr_entry->cusparse_handle, rtcfg.stream));
+  CUSPARSE_CALL(cusparseSetStream(thr_entry->cusparse_handle, thr_entry->stream));
   // allocate matrix for temporary transposed output
-  DType* trans_out = static_cast<DType*>(device->AllocWorkspace(rtcfg.ctx, m * n * sizeof(DType)));
+  DType* trans_out = static_cast<DType*>(device->AllocWorkspace(ctx, m * n * sizeof(DType)));
   // all one data array
-  DType* valptr = static_cast<DType*>(device->AllocWorkspace(rtcfg.ctx, nnz * sizeof(DType)));
-  utils::Fill<kDLGPU>(rtcfg.ctx, valptr, nnz, static_cast<DType>(1.));
+  DType* valptr = static_cast<DType*>(device->AllocWorkspace(ctx, nnz * sizeof(DType)));
+  utils::Fill<kDLGPU>(ctx, valptr, nnz, static_cast<DType>(1.));
   cusparseMatDescr_t descr;
   CUSPARSE_CALL(cusparseCreateMatDescr(&descr));
   CUSPARSE_CALL(cusparseSetMatType(descr, CUSPARSE_MATRIX_TYPE_GENERAL));
@@ -217,12 +218,12 @@ void CusparseCsrmm2(
       static_cast<int32_t*>(csr.indptr->data),
       static_cast<int32_t*>(csr.indices->data),
       B_data, n, &beta, trans_out, m));
-  device->FreeWorkspace(rtcfg.ctx, valptr);
+  device->FreeWorkspace(ctx, valptr);
   // transpose the output matrix
   if (!thr_entry->cublas_handle) {
     CUBLAS_CALL(cublasCreate(&(thr_entry->cublas_handle)));
   }
-  CUBLAS_CALL(cublasSetStream(thr_entry->cublas_handle, rtcfg.stream));
+  CUBLAS_CALL(cublasSetStream(thr_entry->cublas_handle, thr_entry->stream));
   CUBLAS_CALL(Xgeam<DType>(
       thr_entry->cublas_handle,
       CUBLAS_OP_T,
@@ -231,7 +232,7 @@ void CusparseCsrmm2(
       &alpha, trans_out, m,
       &beta, nullptr, n,
       C_data, n));
-  device->FreeWorkspace(rtcfg.ctx, trans_out);
+  device->FreeWorkspace(ctx, trans_out);
 }
 
 }  // namespace cusparse
