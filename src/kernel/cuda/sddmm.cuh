@@ -186,7 +186,7 @@ void SDDMMBcastCoo(
     sizeof(int64_t) * info.rhs_offset.size(), cudaMemcpyHostToDevice));
 
   int64_t len = 1, lhs_len = 1, rhs_len = 1;
-  for (int64_t i = 1; i < info.out_shape.size(); ++i) {
+  for (size_t i = 1; i < info.out_shape.size(); ++i) {
     len *= info.out_shape[i];
     lhs_len *= info.lhs_shape[i];
     rhs_len *= info.rhs_shape[i];
@@ -289,7 +289,7 @@ void SDDMMBcastCsr(
     sizeof(int64_t) * info.rhs_offset.size(), cudaMemcpyHostToDevice));
 
   int64_t len = 1, lhs_len = 1, rhs_len = 1;
-  for (int64_t i = 1; i < info.out_shape.size(); ++i) {
+  for (size_t i = 1; i < info.out_shape.size(); ++i) {
     len *= info.out_shape[i];
     lhs_len *= info.lhs_shape[i];
     rhs_len *= info.rhs_shape[i];
