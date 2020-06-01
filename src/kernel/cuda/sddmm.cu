@@ -62,8 +62,9 @@ void SDDMMBcastCsr(const std::string& op,
                    NDArray efeat,
                    NDArray out,
                    std::vector<NDArray> out_aux) {
-  // TODO
-  LOG(FATAL) << "Not implemented";
+  SWITCH_OP(op, Op, {
+    cuda::SDDMMBcastCsr<IdType, DType, Op>(info, csr, ufeat, vfeat, out);
+  });
 }
 
 template <int XPU, typename IdType, typename DType>
@@ -74,8 +75,9 @@ void SDDMMBcastCoo(const std::string& op,
                    NDArray efeat,
                    NDArray out,
                    std::vector<NDArray> out_aux) {
-  // TODO
-  LOG(FATAL) << "Not implemented";
+  SWITCH_OP(op, Op, {
+    cuda::SDDMMBcastCoo<IdType, DType, Op>(info, csr, ufeat, vfeat, out);
+  });
 }
 
 template void SDDMMCsr<kDLGPU, int32_t, float>(
