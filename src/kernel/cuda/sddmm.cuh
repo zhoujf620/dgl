@@ -234,6 +234,7 @@ void SDDMMCsr(
   auto* thr_entry = runtime::CUDAThreadEntry::ThreadLocal();
   int64_t N = csr.num_rows, M = csr.num_cols, E = csr.indices->shape[0];
 
+  int64_t *ubcast_off = nullptr, *vbcast_off = nullptr;
   int64_t len = 1;
   for (int64_t i = 1; i < ufeat->ndim; ++i)
     len *= ufeat->shape[i];
