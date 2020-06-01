@@ -1944,6 +1944,8 @@ class DGLHeteroGraph(object):
         --------
         edge_subgraph
         """
+        if not isinstance(nodes, dict):
+            nodes = {self.ntypes[0] : nodes}
         check_same_dtype(self._idtype_str, nodes)
         induced_nodes = [utils.toindex(nodes.get(ntype, []), self._idtype_str)
                          for ntype in self.ntypes]
