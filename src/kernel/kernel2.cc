@@ -7,6 +7,7 @@
 
 #include <dgl/packed_func_ext.h>
 #include <dgl/base_heterograph.h>
+#include <dgl/spfmt.h>
 
 #include "../c_api_common.h"
 #include "./binary_reduce.h"
@@ -41,7 +42,10 @@ void SpMM(const std::string& op, const std::string& reduce,
           std::vector<NDArray> out_aux,
           SparseFormat format) {
   // TODO(minjie): fmt tuning
-  format = SparseFormat::kCSR;
+  if (GlobalSparseFormat::ThreadLocal()->GetFormat() == SparseFormat::kCOO)
+    format = SparseFormat::kCOO;
+  else
+    format = SparseFormat::kCSR;
   if (!aten::IsNullArray(ufeat) && !aten::IsNullArray(efeat)
       && HasBcast(ufeat, efeat)) {
     const auto& bcast_info = CalcBcastInfo(op, ufeat, efeat);
@@ -89,7 +93,10 @@ void SDDMM(const std::string& op,
            std::vector<NDArray> out_aux,
            SparseFormat format) {
   // TODO(minjie): fmt tuning
-  format = SparseFormat::kCOO;
+  if (GlobalSparseFormat::ThreadLocal()->GetFormat() == SparseFormat::kCSR)
+    format = SparseFormat::kCOO;
+  else
+    format = SparseFormat::kCSR;
   if (!aten::IsNullArray(ufeat) && !aten::IsNullArray(efeat)
       && HasBcast(ufeat, efeat)) {
     const auto& bcast_info = CalcBcastInfo(op, ufeat, efeat);

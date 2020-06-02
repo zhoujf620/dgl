@@ -12,6 +12,7 @@ from . import contrib
 from . import container
 from . import distributed
 from . import random
+from . import spfmt
 from . import sampling
 
 from ._ffi.runtime_ctypes import TypeCode

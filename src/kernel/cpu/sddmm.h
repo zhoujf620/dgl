@@ -1,6 +1,7 @@
 #ifndef DGL_KERNEL_CPU_SDDMM_CUH_
 #define DGL_KERNEL_CPU_SDDMM_CUH_
 
+#include "../utils.h"
 #include <dgl/array.h>
 #include "../binary_reduce.h"
 
@@ -142,12 +143,9 @@ void SDDMMBcastCsr(const BcastInfo& info,
   const IdType* edges = has_idx?  static_cast<IdType*>(csr.data->data) : nullptr;
   const DType* X = Op::use_lhs? static_cast<DType*>(ufeat->data) : nullptr;
   const DType* Y = Op::use_rhs? static_cast<DType*>(vfeat->data) : nullptr;
-  int64_t dim = 1, lhs_dim = 1, rhs_dim = 1;
-  for (size_t i = 0; i < info.out_shape.size(); ++i) {
-    dim *= info.out_shape[i];
-    lhs_dim *= info.lhs_shape[i];
-    rhs_dim *= info.rhs_shape[i];
-  }
+  int64_t dim = utils::Prod(info.out_shape),
+          lhs_dim = utils::Prod(info.lhs_shape),
+          rhs_dim = utils::Prod(info.rhs_shape);
   DType* O = static_cast<DType*>(out->data);
 #pragma omp parallel for
   for (IdType rid = 0; rid < csr.num_rows; ++rid) {
@@ -175,12 +173,9 @@ void SDDMMBcastCoo(const BcastInfo& info,
   const IdType* edges = has_idx? static_cast<IdType*>(coo.data->data) : nullptr;
   const DType* X = Op::use_lhs? static_cast<DType*>(ufeat->data) : nullptr;
   const DType* Y = Op::use_rhs? static_cast<DType*>(vfeat->data) : nullptr;
-  int64_t dim = 1, lhs_dim = 1, rhs_dim = 1;
-  for (size_t i = 0; i < info.out_shape.size(); ++i) {
-    dim *= info.out_shape[i];
-    lhs_dim *= info.lhs_shape[i];
-    rhs_dim *= info.rhs_shape[i];
-  }
+  int64_t dim = utils::Prod(info.out_shape),
+          lhs_dim = utils::Prod(info.lhs_shape),
+          rhs_dim = utils::Prod(info.rhs_shape);
   DType* O = static_cast<DType*>(out->data);
   const int64_t nnz = coo.row->shape[0];
 #pragma omp parallel for
@@ -249,7 +244,7 @@ struct CopyRhs {
       typedef dgl::kernel::cpu::op::CopyRhs<DType> Op;              \
       { __VA_ARGS__ }                                               \
     } else {                                                        \
-      LOG(FATAL) << "Unsupported SpMM binary operator: " << op;     \
+      LOG(FATAL) << "Unsupported SDDMM binary operator: " << op;     \
     }                                                               \
   } while (0)
 
