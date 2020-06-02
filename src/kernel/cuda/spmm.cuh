@@ -157,7 +157,7 @@ void SpMMCoo(
   const int ntx = utils::FindNumThreads(len, 1024);
   const int nty = 1024 / ntx;
   const int nbx = (len + ntx - 1) / ntx;
-  const int nby = (E + nty - 1) / nty;
+  const int nby = utils::FindNumBlocks((E + nty - 1) / nty, 65535);
   //LOG(INFO) << "nblks=(" << nbx << ", " << nby << ") nthrs=(" << ntx << ", " << nty << ")";
   const dim3 nblks(nbx, nby);
   const dim3 nthrs(ntx, nty);
@@ -219,7 +219,7 @@ void SpMMBcastCoo(
   const int ntx = utils::FindNumThreads(out_len, 1024);
   const int nty = 1024 / ntx;
   const int nbx = (out_len + ntx - 1) / ntx;
-  const int nby = (E + nty - 1) / nty;
+  const int nby = utils::FindNumBlocks((E + nty - 1) / nty, 65535);
   //LOG(INFO) << "nblks=(" << nbx << ", " << nby << ") nthrs=(" << ntx << ", " << nty << ")";
   const dim3 nblks(nbx, nby);
   const dim3 nthrs(ntx, nty);
@@ -271,7 +271,7 @@ void SpMMCsr(
   const int ntx = utils::FindNumThreads(len, 1024);
   const int nty = 1024 / ntx;
   const int nbx = (len + ntx - 1) / ntx;
-  const int nby = (csr.num_rows + nty - 1) / nty;
+  const int nby = utils::FindNumBlocks((csr.num_rows + nty - 1) / nty, 65535);
   //LOG(INFO) << "nblks=(" << nbx << ", " << nby << ") nthrs=(" << ntx << ", " << nty << ")";
   const dim3 nblks(nbx, nby);
   const dim3 nthrs(ntx, nty);
@@ -321,7 +321,8 @@ void SpMMBcastCsr(
   const int ntx = utils::FindNumThreads(len, 1024);
   const int nty = 1024 / ntx;
   const int nbx = (len + ntx - 1) / ntx;
-  const int nby = (csr.num_rows + nty - 1) / nty;
+  const int nby = utils::FindNumBlocks((csr.num_rows + nty - 1) / nty, 65535);
+
   //LOG(INFO) << "nblks=(" << nbx << ", " << nby << ") nthrs=(" << ntx << ", " << nty << ")";
   const dim3 nblks(nbx, nby);
   const dim3 nthrs(ntx, nty);

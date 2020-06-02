@@ -24,6 +24,11 @@ namespace utils {
 int FindNumThreads(int dim, int max_nthrs);
 
 /*
+ * !\brief Find number of blocks is smaller than nblks and max_nblks
+ */
+int FindNumBlocks(int nblks, int max_nblks);
+
+/*
  * !\brief Compute the total number of feature elements.
  */
 int64_t ComputeXLength(runtime::NDArray feat_array);
