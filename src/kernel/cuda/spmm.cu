@@ -171,10 +171,22 @@ void SpMMBcastCsr(
     NDArray out,
     std::vector<NDArray> out_aux) {
   if (reduce == "sum") {
-    SWITCH_OP(op, Op, {
-      cuda::SpMMBcastCsr<IdType, DType, Op, cuda::reduce::Sum<IdType, DType> >(
-          info, csr, ufeat, efeat, out, aten::NullArray(), aten::NullArray());
-    });
+    if (sizeof(IdType) == 4 && op == "mul" && efeat.Numel() == csr.indices->shape[0]) {
+      int64_t x_length = 1;
+      for (int i = 1; i < ufeat->ndim; ++i)
+        x_length *= ufeat->shape[i];
+      cusparse::CusparseCsrmm2<DType>(
+          ufeat->ctx, csr,
+          static_cast<DType*>(ufeat->data),
+          static_cast<DType*>(efeat->data),
+          static_cast<DType*>(out->data),
+          x_length);
+    } else {
+      SWITCH_OP(op, Op, {
+        cuda::SpMMBcastCsr<IdType, DType, Op, cuda::reduce::Sum<IdType, DType> >(
+            info, csr, ufeat, efeat, out, aten::NullArray(), aten::NullArray());
+      });
+    }
   } else if (reduce == "max") {
     SWITCH_OP(op, Op, {
       cuda::SpMMBcastCsr<IdType, DType, Op, cuda::reduce::Max<IdType, DType> >(
