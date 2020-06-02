@@ -93,7 +93,7 @@ __global__ void SDDMMCsrKernel(
   Idx ty = blockIdx.y * blockDim.y + threadIdx.y;
   const Idx stride_y = blockDim.y * gridDim.y;
   while (ty < E) {
-    const Idx src = BinarySearchSrc<Idx>(indptr, N, ty);
+    const Idx src = BinarySearchSrc<Idx>(indptr, N + 1, ty);
     const Idx dst = _ldg(indices + ty);
     const Idx eid = has_idx ? _ldg(edge_map + ty) : ty;
     int64_t tx = blockIdx.x * blockDim.x + threadIdx.x;
