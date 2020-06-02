@@ -46,8 +46,6 @@ void SpMM(const std::string& op, const std::string& reduce,
     format = SparseFormat::kCOO;
   else
     format = SparseFormat::kCSR;
-  LOG(INFO) << "SpMM call " <<
-    ToStringSparseFormat(GlobalSparseFormat::Get()->GetFormat()); 
   if (!aten::IsNullArray(ufeat) && !aten::IsNullArray(efeat)
       && HasBcast(ufeat, efeat)) {
     const auto& bcast_info = CalcBcastInfo(op, ufeat, efeat);
@@ -99,8 +97,6 @@ void SDDMM(const std::string& op,
     format = SparseFormat::kCSR;
   else
     format = SparseFormat::kCOO;
-  LOG(INFO) << "SDDMM call " <<
-    ToStringSparseFormat(GlobalSparseFormat::Get()->GetFormat()); 
   if (!aten::IsNullArray(ufeat) && !aten::IsNullArray(efeat)
       && HasBcast(ufeat, efeat)) {
     const auto& bcast_info = CalcBcastInfo(op, ufeat, efeat);

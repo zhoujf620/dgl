@@ -263,7 +263,7 @@ void SpMMBcastCoo(
   if (reduce == "sum") {
     SWITCH_OP(op, Op, {
       cuda::SpMMBcastCoo<IdType, DType, Op, cuda::reduce::Sum<IdType, DType, true> > (
-          info, coo, ufeat, efeat, out, out_aux[0], out_aux[1]);
+          info, coo, ufeat, efeat, out, aten::NullArray(), aten::NullArray());
     });
   } else if (reduce == "max") {
     SWITCH_OP(op, Op, {
@@ -290,7 +290,7 @@ void SpMMCoo(const std::string& op, const std::string& reduce,
   if (reduce == "sum") {
     SWITCH_OP(op, Op, {
       cuda::SpMMCoo<IdType, DType, Op, cuda::reduce::Sum<IdType, DType, true> > (
-          coo, ufeat, efeat, out, out_aux[0], out_aux[1]);
+          coo, ufeat, efeat, out, aten::NullArray(), aten::NullArray());
     });
   } else if (reduce == "max") {
     SWITCH_OP(op, Op, {
