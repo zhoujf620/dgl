@@ -1409,7 +1409,6 @@ HeteroGraphPtr UnitGraph::GetAny() const {
 }
 
 dgl_format_code_t UnitGraph::GetFormatInUse() const {
-  CHECK(false);
   dgl_format_code_t ret = 0;
   if (in_csr_->defined()) ret = ret | 1;
   ret = ret << 1;
