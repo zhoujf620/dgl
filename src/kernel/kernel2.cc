@@ -45,7 +45,7 @@ void SpMM(const std::string& op, const std::string& reduce,
   if (!aten::IsNullArray(ufeat) && !aten::IsNullArray(efeat)
       && HasBcast(ufeat, efeat)) {
     const auto& bcast_info = CalcBcastInfo(op, ufeat, efeat);
-    ATEN_XPU_SWITCH(graph->Context().device_type, XPU, {
+    ATEN_XPU_SWITCH_CUDA(graph->Context().device_type, XPU, {
       ATEN_ID_TYPE_SWITCH(graph->DataType(), IdType, {
         ATEN_FLOAT_TYPE_SWITCH(out->dtype, DType, "Feature data", {
           if (format == SparseFormat::kCSR) {
@@ -93,7 +93,7 @@ void SDDMM(const std::string& op,
   if (!aten::IsNullArray(ufeat) && !aten::IsNullArray(efeat)
       && HasBcast(ufeat, efeat)) {
     const auto& bcast_info = CalcBcastInfo(op, ufeat, efeat);
-    ATEN_XPU_SWITCH(graph->Context().device_type, XPU, {
+    ATEN_XPU_SWITCH_CUDA(graph->Context().device_type, XPU, {
       ATEN_ID_TYPE_SWITCH(graph->DataType(), IdType, {
         ATEN_FLOAT_TYPE_SWITCH(out->dtype, DType, "Feature data", {
           if (format == SparseFormat::kCSR) {
