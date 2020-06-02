@@ -195,7 +195,7 @@ void SpMMBcastSumCsr(
       for (IdType j = row_start; j < row_end; ++j) {
         const IdType cid = indices[j];
         const IdType eid = has_idx? edges[j] : j;
-        const DType* lhs_off = Op::use_lhs? X + rid * lhs_dim + info.lhs_offset[k] : nullptr;
+        const DType* lhs_off = Op::use_lhs? X + cid * lhs_dim + info.lhs_offset[k] : nullptr;
         const DType* rhs_off = Op::use_rhs? W + eid * rhs_dim + info.rhs_offset[k] : nullptr;
         CHECK_LT(cid * lhs_dim + info.lhs_offset[k], ufeat.Numel());
 
