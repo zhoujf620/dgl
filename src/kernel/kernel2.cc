@@ -42,10 +42,12 @@ void SpMM(const std::string& op, const std::string& reduce,
           std::vector<NDArray> out_aux,
           SparseFormat format) {
   // TODO(minjie): fmt tuning
-  if (GlobalSparseFormat::ThreadLocal()->GetFormat() == SparseFormat::kCOO)
+  if (GlobalSparseFormat::Get()->GetFormat() == SparseFormat::kCOO)
     format = SparseFormat::kCOO;
   else
     format = SparseFormat::kCSR;
+  LOG(INFO) << "SpMM call " <<
+    ToStringSparseFormat(GlobalSparseFormat::Get()->GetFormat()); 
   if (!aten::IsNullArray(ufeat) && !aten::IsNullArray(efeat)
       && HasBcast(ufeat, efeat)) {
     const auto& bcast_info = CalcBcastInfo(op, ufeat, efeat);
@@ -93,10 +95,12 @@ void SDDMM(const std::string& op,
            std::vector<NDArray> out_aux,
            SparseFormat format) {
   // TODO(minjie): fmt tuning
-  if (GlobalSparseFormat::ThreadLocal()->GetFormat() == SparseFormat::kCSR)
-    format = SparseFormat::kCOO;
-  else
+  if (GlobalSparseFormat::Get()->GetFormat() == SparseFormat::kCSR)
     format = SparseFormat::kCSR;
+  else
+    format = SparseFormat::kCOO;
+  LOG(INFO) << "SDDMM call " <<
+    ToStringSparseFormat(GlobalSparseFormat::Get()->GetFormat()); 
   if (!aten::IsNullArray(ufeat) && !aten::IsNullArray(efeat)
       && HasBcast(ufeat, efeat)) {
     const auto& bcast_info = CalcBcastInfo(op, ufeat, efeat);

@@ -15,8 +15,9 @@ namespace dgl{
 class GlobalSparseFormat{
  public:
   GlobalSparseFormat(): fmt(SparseFormat::kAny) {}
-  static GlobalSparseFormat *ThreadLocal() {
-    return dmlc::ThreadLocalStore<GlobalSparseFormat>::Get();
+  static GlobalSparseFormat *Get() {
+    static GlobalSparseFormat fmt;
+    return &fmt;
   }
   SparseFormat GetFormat() const {
     return fmt;
