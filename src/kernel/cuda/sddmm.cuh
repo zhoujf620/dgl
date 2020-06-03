@@ -144,7 +144,7 @@ void SDDMMCoo(
   const int ntx = utils::FindNumThreads(len, 1024);
   const int nty = 1024 / ntx;
   const int nbx = (len + ntx - 1) / ntx;
-  const int nby = (nnz + nty - 1) / nty;
+  const int nby = utils::FindNumBlocks((nnz + nty - 1) / nty, 65535);
   //LOG(INFO) << "nblks=(" << nbx << ", " << nby << ") nthrs=(" << ntx << ", " << nty << ")";
   const dim3 nblks(nbx, nby);
   const dim3 nthrs(ntx, nty);
@@ -199,7 +199,7 @@ void SDDMMBcastCoo(
   const int ntx = utils::FindNumThreads(len, 1024);
   const int nty = 1024 / ntx;
   const int nbx = (len + ntx - 1) / ntx;
-  const int nby = (nnz + nty - 1) / nty;
+  const int nby = utils::FindNumBlocks((nnz + nty - 1) / nty, 65535);
   //LOG(INFO) << "nblks=(" << nbx << ", " << nby << ") nthrs=(" << ntx << ", " << nty << ")";
   const dim3 nblks(nbx, nby);
   const dim3 nthrs(ntx, nty);
@@ -233,8 +233,8 @@ void SDDMMCsr(
 
   int64_t *ubcast_off = nullptr, *vbcast_off = nullptr;
   int64_t len = 1;
-  for (int64_t i = 1; i < ufeat->ndim; ++i)
-    len *= ufeat->shape[i];
+  for (int64_t i = 1; i < out->ndim; ++i)
+    len *= out->shape[i];
   int64_t reduce_dim = 1;
   if (Op::reduce_last_dim) {
     CHECK(!aten::IsNullArray(ufeat));
@@ -244,7 +244,7 @@ void SDDMMCsr(
   const int ntx = utils::FindNumThreads(len, 1024);
   const int nty = 1024 / ntx;
   const int nbx = (len + ntx - 1) / ntx;
-  const int nby = (E + nty - 1) / nty;
+  const int nby = utils::FindNumBlocks((E + nty - 1) / nty, 65535);
   const dim3 nblks(nbx, nby);
   const dim3 nthrs(ntx, nty);
 
@@ -297,7 +297,7 @@ void SDDMMBcastCsr(
   const int ntx = utils::FindNumThreads(len, 1024);
   const int nty = 1024 / ntx;
   const int nbx = (len + ntx - 1) / ntx;
-  const int nby = (E + nty - 1) / nty;
+  const int nby = utils::FindNumBlocks((E + nty - 1) / nty, 65535);
   const dim3 nblks(nbx, nby);
   const dim3 nthrs(ntx, nty);
 
