@@ -24,6 +24,77 @@ __device__ __forceinline__ T _ldg(T* addr) {
 #endif
 }
 
+template <typename DType, typename IdType, unsigned int blockSize>
+__device__ void warpReduce(volatile DType* sdata, IdType tid) {
+  if (blockSize >= 64) sdata[tid] += sdata[tid + 32];
+  if (blockSize >= 32) sdata[tid] += sdata[tid + 16];
+  if (blockSize >= 16) sdata[tid] += sdata[tid + 8];
+  if (blockSize >= 8) sdata[tid] += sdata[tid + 4];
+  if (blockSize >= 4) sdata[tid] += sdata[tid + 2];
+  if (blockSize >= 2) sdata[tid] += sdata[tid + 1];
+}
+
+template <typename Idx, typename DType, unsigned int blockSize>
+__global__ void SDDMMDotCOOKernel(
+  const DType *ufeat, const DType *vfeat, DType *out,
+  const Idx *row, const Idx *col, const Idx* edge_map,
+  int64_t N, int64_t M, int64_t E, int64_t reduce_size,
+  const int64_t *ubcast_off, const int64_t *vbcast_off,
+  int64_t ufeat_len, int64_t vfeat_len, int64_t out_len) {
+  assert(reduce_size <= blockSize * 2);
+  // SDDMM Dot with COO.
+  Idx ty = blockIdx.y * blockDim.y + threadIdx.y;
+  const Idx stride_y = blockDim.y * gridDim.y;
+  __shared__ DType sdata[blockSize];  
+  while (ty < E) {
+    const Idx src = _ldg(row + ty);
+    const Idx dst = _ldg(col + ty);
+    const Idx eid = edge_map ? _ldg(edge_map + ty) : ty;
+    const DType* lhsoff = (ufeat + src * ufeat_len * reduce_size);
+    const DType* rhsoff = (vfeat + dst * vfeat_len * reduce_size);
+    DType* outoff = out + eid * out_len;
+    
+    for (int out_i = 0; out_i < out_len; ++out_i) {
+      const Idx lhs_add = ubcast_off ? ubcast_off[out_i] : out_i;
+      const Idx rhs_add = vbcast_off ? vbcast_off[out_i] : out_i;
+      unsigned int tid = threadIdx.x;
+      unsigned int i = blockIdx.x * (blockSize * 2) + tid;
+      unsigned int gridSize = blockSize * 2 * gridDim.x;
+      sdata[tid] = 0;
+      
+      while (i < reduce_size) {
+        sdata[tid] +=
+            lhsoff[lhs_add * reduce_size + i] * 
+            rhsoff[rhs_add * reduce_size + i] +
+            (blockSize + i < reduce_size) ? 
+            (lhsoff[lhs_add * reduce_size + blockSize + i] *
+             rhsoff[rhs_add * reduce_size + blockSize + i]) : DType(0);
+        i += gridSize;
+      } 
+      __syncthreads();
+      if (blockSize >= 512) {
+        if (tid < 256)
+          sdata[tid] += sdata[tid + 256];
+        __syncthreads(); 
+      }
+      if (blockSize >= 256) {
+        if (tid < 128)
+          sdata[tid] += sdata[tid + 128];
+        __syncthreads(); 
+      }
+      if (blockSize >= 128) {
+        if (tid < 64)
+          sdata[tid] += sdata[tid + 64];
+        __syncthreads(); 
+      }
+      if (tid < 32) warpReduce<DType, Idx, blockSize>(sdata, tid);
+      if (tid == 0)
+        outoff[out_i] = sdata[0];
+    }
+    ty += stride_y;
+  }
+} 
+
 template <typename Idx, typename DType,
           typename BinaryOp>
 __global__ void SDDMMCooKernel(
