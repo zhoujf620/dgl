@@ -45,7 +45,7 @@ __global__ void SDDMMDotCOOKernel(
   // SDDMM Dot with COO.
   Idx ty = blockIdx.y * blockDim.y + threadIdx.y;
   const Idx stride_y = blockDim.y * gridDim.y;
-  __shared__ DType sdata[blockSize];  
+  __shared__ DType sdata[1024];
   while (ty < E) {
     const Idx src = _ldg(row + ty);
     const Idx dst = _ldg(col + ty);
@@ -57,38 +57,39 @@ __global__ void SDDMMDotCOOKernel(
     for (int out_i = 0; out_i < out_len; ++out_i) {
       const Idx lhs_add = ubcast_off ? ubcast_off[out_i] : out_i;
       const Idx rhs_add = vbcast_off ? vbcast_off[out_i] : out_i;
-      unsigned int tid = threadIdx.x;
+      unsigned int tidx = threadIdx.x;
+			unsigned int tidxy = threadIdx.y * blockSize + threadIdx.x;
       unsigned int i = blockIdx.x * (blockSize * 2) + tid;
       unsigned int gridSize = blockSize * 2 * gridDim.x;
-      sdata[tid] = 0;
+      sdata[tidxy] = 0;
       
       while (i < reduce_size) {
-        sdata[tid] +=
-            lhsoff[lhs_add * reduce_size + i] * 
-            rhsoff[rhs_add * reduce_size + i] +
-            (blockSize + i < reduce_size) ? 
+        sdata[tidxy] +=
+          (i < reduce_size) ?
+            (lhsoff[lhs_add * reduce_size + i] * rhsoff[rhs_add * reduce_size + i]) : DType(0) +
+          (blockSize + i < reduce_size) ? 
             (lhsoff[lhs_add * reduce_size + blockSize + i] *
              rhsoff[rhs_add * reduce_size + blockSize + i]) : DType(0);
         i += gridSize;
       } 
       __syncthreads();
       if (blockSize >= 512) {
-        if (tid < 256)
-          sdata[tid] += sdata[tid + 256];
+        if (tidx < 256)
+          sdata[tidxy] += sdata[tidxy + 256];
         __syncthreads(); 
       }
       if (blockSize >= 256) {
-        if (tid < 128)
-          sdata[tid] += sdata[tid + 128];
+        if (tidx < 128)
+          sdata[tidxy] += sdata[tidxy + 128];
         __syncthreads(); 
       }
       if (blockSize >= 128) {
-        if (tid < 64)
-          sdata[tid] += sdata[tid + 64];
+        if (tidx < 64)
+          sdata[tidxy] += sdata[tidxy + 64];
         __syncthreads(); 
       }
-      if (tid < 32) warpReduce<DType, Idx, blockSize>(sdata, tid);
-      if (tid == 0)
+      if (tidx < 32) warpReduce<DType, Idx, blockSize>(sdata, tidx, tidxy);
+      if (tidx == 0)
         outoff[out_i] = sdata[0];
     }
     ty += stride_y;
@@ -150,6 +151,14 @@ __device__ __forceinline__ Idx BinarySearchSrc(const Idx *array, Idx length, Idx
     return hi - 1;
   }
 }
+
+template <typename Idx, typename DType, unsigned int blockSize>
+__global__ void SDDMMDotCsrKernel(
+  const DType *ufeat, const DType *vfeat, DType *out,
+  const Idx *indptr, const Idx *indices, const Idx* edge_map,
+  int64_t N, int64_t M, int64_t E, int64_t reduce_size,
+  int64_t *ubcast_off, int64_t *vbcast_off,
+  int64_t ufeat_len, int64_t vfeat_len, int64_t out_len) {}
 
 template <typename Idx, typename DType,
           typename BinaryOp>
@@ -230,6 +239,50 @@ void SDDMMCoo(
     );
 }
 
+template <typename Idx, typename DType, unsigned int blockSize>
+void SDDMMCooDot(
+    const dgl::aten::COOMatrix& coo,
+    NDArray ufeat,
+    NDArray vfeat,
+    NDArray out) {
+  const Idx *row = static_cast<Idx*>(coo.row->data);
+  const Idx *col = static_cast<Idx*>(coo.col->data);
+  const Idx *edge_map = aten::IsNullArray(coo.data)? nullptr : static_cast<Idx*>(coo.data->data);
+  const DType *ufeat_data = aten::IsNullArray(ufeat)? nullptr : static_cast<DType*>(ufeat->data);
+  const DType *vfeat_data = aten::IsNullArray(vfeat)? nullptr : static_cast<DType*>(vfeat->data);
+  DType *out_data = static_cast<DType*>(out->data);
+  auto* thr_entry = runtime::CUDAThreadEntry::ThreadLocal();
+
+  int64_t *ubcast_off = nullptr, *vbcast_off = nullptr;
+  int64_t len = 1;
+  for (int64_t i = 1; i < out->ndim; ++i)
+    len *= out->shape[i];
+  int64_t reduce_dim = 1;
+  if (Op::reduce_last_dim) {
+    CHECK(!aten::IsNullArray(ufeat));
+    reduce_dim = ufeat->shape[ufeat->ndim - 1];
+  }
+
+  const int64_t nnz = coo.row->shape[0];
+
+  const int ntx = utils::FindNumThreads(reduce_dim, 512);
+  const int nty = 1024 / ntx;
+  const int nbx = (reduce_dim + ntx - 1) / ntx;
+  const int nby = utils::FindNumBlocks((nnz + nty - 1) / nty, 65535);
+  //LOG(INFO) << "nblks=(" << nbx << ", " << nby << ") nthrs=(" << ntx << ", " << nty << ")";
+  const dim3 nblks(nbx, nby);
+  const dim3 nthrs(ntx, nty);
+
+	SDDMMCooDotKernel<Idx, DType, blockSize>
+		<<<nblks, nthrs, 0, thr_entry->stream>>>(
+			ufeat_data, vfeat_data, out_data,
+			row, col, edge_map,
+			coo.num_rows, coo.num_cols, nnz, reduce_dim,
+			ubcast_off, vbcast_off,
+			len, len, len
+		);
+}
+
 template <typename Idx, typename DType, typename Op>
 void SDDMMBcastCoo(
     const BcastInfo& info,
@@ -285,6 +338,48 @@ void SDDMMBcastCoo(
     );
   device->FreeWorkspace(ctx, ubcast_off);
   device->FreeWorkspace(ctx, vbcast_off);
+}
+
+template <typename Idx, typename DType, unsigned int blockSize>
+void SDDMMDotCsr(
+    const dgl::aten::CSRMatrix& csr,
+    NDArray ufeat,
+    NDArray vfeat,
+    NDArray out) {
+  const Idx *indptr = static_cast<Idx*>(csr.indptr->data);
+  const Idx *indices = static_cast<Idx*>(csr.indices->data);
+  const Idx *edge_map = aten::IsNullArray(csr.data)? nullptr : static_cast<Idx*>(csr.data->data);
+  const DType *ufeat_data = aten::IsNullArray(ufeat)? nullptr : static_cast<DType*>(ufeat->data);
+  const DType *vfeat_data = aten::IsNullArray(vfeat)? nullptr : static_cast<DType*>(vfeat->data);
+  DType *out_data = static_cast<DType*>(out->data);
+  auto* thr_entry = runtime::CUDAThreadEntry::ThreadLocal();
+  int64_t N = csr.num_rows, M = csr.num_cols, E = csr.indices->shape[0];
+
+  int64_t *ubcast_off = nullptr, *vbcast_off = nullptr;
+  int64_t len = 1;
+  for (int64_t i = 1; i < out->ndim; ++i)
+    len *= out->shape[i];
+  int64_t reduce_dim = 1;
+  if (Op::reduce_last_dim) {
+    CHECK(!aten::IsNullArray(ufeat));
+    reduce_dim = ufeat->shape[ufeat->ndim - 1];
+  }
+
+  const int ntx = utils::FindNumThreads(reduce_dim, 1024);
+  const int nty = 1024 / ntx;
+  const int nbx = (reduce_dim + ntx - 1) / ntx; // 1 actually
+  const int nby = utils::FindNumBlocks((E + nty - 1) / nty, 65535);
+  const dim3 nblks(nbx, nby);
+  const dim3 nthrs(ntx, nty);
+
+  SDDMMDotCsrKernel<Idx, DType, blockSize>
+    <<<nblks, nthrs, 0, thr_entry->stream>>>(
+      ufeat_data, vfeat_data, out_data,
+      indptr, indices, edge_map,
+      N, M, E, reduce_dim,
+      ubcast_off, vbcast_off,
+      len, len, len
+    );
 }
 
 template <typename Idx, typename DType, typename Op>
