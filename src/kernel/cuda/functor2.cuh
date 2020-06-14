@@ -86,9 +86,7 @@ struct Sum {
   }
   static __device__ __forceinline__ void CallArg(Idx fid,
     Idx *arg_u_buf, Idx *arg_e_buf,
-    DType val, DType val_ref, Idx uid, Idx eid) {
-      // placeholder
-    }
+    DType val, DType val_ref, Idx uid, Idx eid) {}
 };
 
 template <typename Idx,
@@ -116,7 +114,7 @@ struct Max {
     if (atomic) {
       if (val == val_ref) {
         if (arg_u_buf)
-          arg_u_buf[fid] = uid; // TODO(zihao): select min?
+          arg_u_buf[fid] = uid;
         if (arg_e_buf)
           arg_e_buf[fid] = eid;
       }
@@ -149,7 +147,7 @@ struct Min {
     if (atomic) {
       if (val == val_ref) {
         if (arg_u_buf)
-          arg_u_buf[fid] = uid; // TODO(zihao): select min?
+          arg_u_buf[fid] = uid;
         if (arg_e_buf)
           arg_e_buf[fid] = eid;
       }

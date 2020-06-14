@@ -24,6 +24,27 @@ __device__ __forceinline__ T _ldg(T* addr) {
 #endif
 }
 
+template <typename DType>
+__global__ void _FillKernel(DType* ptr, size_t length, DType val) {
+  int tx = blockIdx.x * blockDim.x + threadIdx.x;
+  int stride_x = gridDim.x * blockDim.x;
+  while (tx < length) {
+    ptr[tx] = val;
+    tx += stride_x;
+  }
+}
+
+template <typename DType>
+void Fill(const DLContext& ctx, DType* ptr, size_t length, DType val) {
+  auto* thr_entry = runtime::CUDAThreadEntry::ThreadLocal();
+  int nt = utils::FindNumThreads(length, 1024);
+  int nb = (length + nt - 1) / nt;
+  _FillKernel<<<nb, nt, 0, thr_entry->stream>>>(ptr, length, val);
+}
+
+template void Fill<float>(const DLContext& ctx, float* ptr, size_t length, float val);
+template void Fill<double>(const DLContext& ctx, double* ptr, size_t length, double val);
+
 template <typename Idx, typename DType,
           typename BinaryOp, typename ReduceOp>
 __global__ void SpMMCooKernel(
@@ -45,13 +66,17 @@ __global__ void SpMMCooKernel(
     DType* uoff = BinaryOp::use_lhs ? (ufeat + src * ufeat_len): nullptr;
     DType* eoff = BinaryOp::use_rhs ? (efeat + eid * efeat_len): nullptr;
     DType* outoff = out + dst * out_len;
+    printf("%d %lld %lld\n", dst, out_len, tx);
     while (tx < out_len) {
+      /*
       int64_t lhs_add = ubcast_off ? ubcast_off[tx] : tx;
       int64_t rhs_add = ebcast_off ? ebcast_off[tx] : tx;
       DType val = BinaryOp::Call(uoff + lhs_add, eoff + rhs_add);
       Idx* arguoff = (ReduceOp::require_arg && BinaryOp::use_lhs) ? (arg_u + dst * out_len + tx): nullptr;
       Idx* argeoff = (ReduceOp::require_arg && BinaryOp::use_rhs) ? (arg_e + dst * out_len + tx): nullptr;
       ReduceOp::Call(outoff + tx, arguoff, argeoff, val, src, eid);
+      */
+      *(outoff + tx) = 1.0;
       tx += stride_x;
     }
     ty += stride_y;
@@ -149,10 +174,10 @@ void SpMMCoo(
   int64_t N = coo.num_rows, M = coo.num_cols, E = efeat->shape[0];
 
   int64_t *ubcast_off = nullptr, *ebcast_off = nullptr;
-  // ComputeBcastOff(ubcast_off, ebast_off, info);
   int64_t len = 1;
   for (int64_t i = 1; i < ufeat->ndim; ++i)
     len *= ufeat->shape[i];
+  Fill<DType>(out->ctx, out_data, len * out->shape[0], ReduceOp::zero);
 
   const int ntx = utils::FindNumThreads(len, 1024);
   const int nty = 1024 / ntx;
@@ -199,7 +224,7 @@ void SpMMBcastCoo(
   Idx *argu_data = static_cast<Idx*>(argu->data),
       *arge_data = static_cast<Idx*>(arge->data);
   auto* thr_entry = runtime::CUDAThreadEntry::ThreadLocal();
-  int64_t N = coo.num_rows, M = coo.num_cols, E = efeat->shape[0];
+  int64_t N = coo.num_rows, M = coo.num_cols, E = efeat->shape[0]; 
 
   DLContext ctx = ufeat->ctx;
   auto device = runtime::DeviceAPI::Get(ctx); 
@@ -215,6 +240,7 @@ void SpMMBcastCoo(
   int64_t ufeat_len = utils::Prod(info.lhs_shape);
   int64_t efeat_len = utils::Prod(info.rhs_shape);
   int64_t out_len = utils::Prod(info.out_shape);
+  Fill<DType>(ctx, out_data, out_len * out->shape[0], ReduceOp::zero);
 
   const int ntx = utils::FindNumThreads(out_len, 1024);
   const int nty = 1024 / ntx;
