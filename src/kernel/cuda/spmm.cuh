@@ -25,6 +25,13 @@ __device__ __forceinline__ T _ldg(T* addr) {
 }
 
 template <typename DType>
+inline DType* get_ndarray_ptr(const NDArray& array) {
+  if (aten::IsNullArray(array))
+    return nullptr;
+  return static_cast<DType*>(array->data);
+}
+
+template <typename DType>
 __global__ void _FillKernel(DType* ptr, size_t length, DType val) {
   int tx = blockIdx.x * blockDim.x + threadIdx.x;
   int stride_x = gridDim.x * blockDim.x;
@@ -48,8 +55,8 @@ template void Fill<double>(const DLContext& ctx, double* ptr, size_t length, dou
 template <typename Idx, typename DType,
           typename BinaryOp, typename ReduceOp>
 __global__ void SpMMCooKernel(
-  DType *ufeat, DType *efeat, DType *out, Idx *arg_u, Idx *arg_e,
-  Idx *row, Idx *col, Idx* edge_map,
+  const DType *ufeat, const DType *efeat, DType *out, Idx *arg_u, Idx *arg_e,
+  const Idx *row, const Idx *col, const Idx* edge_map,
   int64_t N, int64_t M, int64_t E,
   int64_t *ubcast_off, int64_t *ebcast_off,
   int64_t ufeat_len, int64_t efeat_len, int64_t out_len) {
@@ -63,20 +70,16 @@ __global__ void SpMMCooKernel(
     const Idx eid = has_idx ? _ldg(edge_map + ty) : ty;
     int64_t tx = blockIdx.x * blockDim.x + threadIdx.x;
     const int64_t stride_x = blockDim.x * gridDim.x;
-    DType* uoff = BinaryOp::use_lhs ? (ufeat + src * ufeat_len): nullptr;
-    DType* eoff = BinaryOp::use_rhs ? (efeat + eid * efeat_len): nullptr;
+    const DType* uoff = BinaryOp::use_lhs ? (ufeat + src * ufeat_len): nullptr;
+    const DType* eoff = BinaryOp::use_rhs ? (efeat + eid * efeat_len): nullptr;
     DType* outoff = out + dst * out_len;
-    printf("%d %lld %lld\n", dst, out_len, tx);
     while (tx < out_len) {
-      /*
       int64_t lhs_add = ubcast_off ? ubcast_off[tx] : tx;
       int64_t rhs_add = ebcast_off ? ebcast_off[tx] : tx;
       DType val = BinaryOp::Call(uoff + lhs_add, eoff + rhs_add);
       Idx* arguoff = (ReduceOp::require_arg && BinaryOp::use_lhs) ? (arg_u + dst * out_len + tx): nullptr;
       Idx* argeoff = (ReduceOp::require_arg && BinaryOp::use_rhs) ? (arg_e + dst * out_len + tx): nullptr;
       ReduceOp::Call(outoff + tx, arguoff, argeoff, val, src, eid);
-      */
-      *(outoff + tx) = 1.0;
       tx += stride_x;
     }
     ty += stride_y;
@@ -86,8 +89,8 @@ __global__ void SpMMCooKernel(
 template <typename Idx, typename DType,
           typename BinaryOp, typename ReduceOp>
 __global__ void ArgSpMMCooKernel(
-  DType *ufeat, DType *efeat, DType *out, Idx *arg_u, Idx *arg_e,
-  Idx *row, Idx *col, Idx* edge_map,
+  const DType *ufeat, const DType *efeat, DType *out, Idx *arg_u, Idx *arg_e,
+  const Idx *row, const Idx *col, const Idx* edge_map,
   int64_t N, int64_t M, int64_t E,
   int64_t *ubcast_off, int64_t *ebcast_off,
   int64_t ufeat_len, int64_t efeat_len, int64_t out_len) {
@@ -101,8 +104,8 @@ __global__ void ArgSpMMCooKernel(
     const Idx eid = has_idx ? _ldg(edge_map + ty) : ty;
     int64_t tx = blockIdx.x * blockDim.x + threadIdx.x;
     const int64_t stride_x = blockDim.x * gridDim.x;
-    DType* uoff = BinaryOp::use_lhs ? (ufeat + src * ufeat_len): nullptr;
-    DType* eoff = BinaryOp::use_rhs ? (efeat + eid * efeat_len): nullptr;
+    const DType* uoff = BinaryOp::use_lhs ? (ufeat + src * ufeat_len): nullptr;
+    const DType* eoff = BinaryOp::use_rhs ? (efeat + eid * efeat_len): nullptr;
     DType* outoff = out + dst * out_len;
     Idx* arguoff = BinaryOp::use_lhs ? (arg_u + dst * out_len): nullptr;
     Idx* argeoff = BinaryOp::use_rhs ? (arg_e + dst * out_len): nullptr;
@@ -161,22 +164,21 @@ void SpMMCoo(
     const dgl::aten::COOMatrix& coo,
     NDArray ufeat, NDArray efeat,
     NDArray out, NDArray argu, NDArray arge) {
-  Idx *row = static_cast<Idx*>(coo.row->data),
-      *col = static_cast<Idx*>(coo.col->data),
-      *edge_map = aten::IsNullArray(coo.data) ?
-          nullptr : static_cast<Idx*>(coo.data->data);
-  DType *ufeat_data = static_cast<DType*>(ufeat->data),
-        *efeat_data = static_cast<DType*>(efeat->data),
-        *out_data = static_cast<DType*>(out->data);
-  Idx *argu_data = static_cast<Idx*>(argu->data),
-      *arge_data = static_cast<Idx*>(arge->data);
+  Idx *row = get_ndarray_ptr<Idx>(coo.row),
+      *col = get_ndarray_ptr<Idx>(coo.col),
+      *edge_map = get_ndarray_ptr<Idx>(coo.data);
+  DType *ufeat_data = get_ndarray_ptr<DType>(ufeat),
+        *efeat_data = get_ndarray_ptr<DType>(efeat),
+        *out_data = get_ndarray_ptr<DType>(out);
+  Idx *argu_data = get_ndarray_ptr<Idx>(argu),
+      *arge_data = get_ndarray_ptr<Idx>(arge);
   auto* thr_entry = runtime::CUDAThreadEntry::ThreadLocal();
-  int64_t N = coo.num_rows, M = coo.num_cols, E = efeat->shape[0];
+  int64_t N = coo.num_rows, M = coo.num_cols, E = coo.row->shape[0];
 
   int64_t *ubcast_off = nullptr, *ebcast_off = nullptr;
   int64_t len = 1;
-  for (int64_t i = 1; i < ufeat->ndim; ++i)
-    len *= ufeat->shape[i];
+  for (int64_t i = 1; i < out->ndim; ++i)
+    len *= out->shape[i];
   Fill<DType>(out->ctx, out_data, len * out->shape[0], ReduceOp::zero);
 
   const int ntx = utils::FindNumThreads(len, 1024);
@@ -214,17 +216,16 @@ void SpMMBcastCoo(
     const dgl::aten::COOMatrix& coo,
     NDArray ufeat, NDArray efeat,
     NDArray out, NDArray argu, NDArray arge) {
-  Idx *row = static_cast<Idx*>(coo.row->data),
-      *col = static_cast<Idx*>(coo.col->data),
-      *edge_map = aten::IsNullArray(coo.data) ?
-          nullptr : static_cast<Idx*>(coo.data->data);
-  DType *ufeat_data = static_cast<DType*>(ufeat->data),
-        *efeat_data = static_cast<DType*>(efeat->data),
-        *out_data = static_cast<DType*>(out->data);
-  Idx *argu_data = static_cast<Idx*>(argu->data),
-      *arge_data = static_cast<Idx*>(arge->data);
+  Idx *row = get_ndarray_ptr<Idx>(coo.row),
+      *col = get_ndarray_ptr<Idx>(coo.col),
+      *edge_map = get_ndarray_ptr<Idx>(coo.data);
+  DType *ufeat_data = get_ndarray_ptr<DType>(ufeat),
+        *efeat_data = get_ndarray_ptr<DType>(efeat),
+        *out_data = get_ndarray_ptr<DType>(out);
+  Idx *argu_data = get_ndarray_ptr<Idx>(argu),
+      *arge_data = get_ndarray_ptr<Idx>(arge);
   auto* thr_entry = runtime::CUDAThreadEntry::ThreadLocal();
-  int64_t N = coo.num_rows, M = coo.num_cols, E = efeat->shape[0]; 
+  int64_t N = coo.num_rows, M = coo.num_cols, E = coo.row->shape[0]; 
 
   DLContext ctx = ufeat->ctx;
   auto device = runtime::DeviceAPI::Get(ctx); 
@@ -278,14 +279,14 @@ void SpMMCsr(
     const dgl::aten::CSRMatrix& csr,
     NDArray ufeat, NDArray efeat,
     NDArray out, NDArray argu, NDArray arge) {
-  const Idx *indptr = static_cast<Idx*>(csr.indptr->data);
-  const Idx *indices = static_cast<Idx*>(csr.indices->data);
-  const Idx *edge_map = aten::IsNullArray(csr.data)? nullptr : static_cast<Idx*>(csr.data->data);
-  const DType *ufeat_data = aten::IsNullArray(ufeat)? nullptr : static_cast<DType*>(ufeat->data);
-  const DType *efeat_data = aten::IsNullArray(efeat)? nullptr : static_cast<DType*>(efeat->data);
-  DType *out_data = static_cast<DType*>(out->data);
-  Idx* argu_data = aten::IsNullArray(argu)? nullptr : static_cast<Idx*>(argu->data);
-  Idx* arge_data = aten::IsNullArray(arge)? nullptr : static_cast<Idx*>(arge->data);
+  const Idx *indptr = get_ndarray_ptr<Idx>(csr.indptr);
+  const Idx *indices = get_ndarray_ptr<Idx>(csr.indices);
+  const Idx *edge_map = get_ndarray_ptr<Idx>(csr.data);
+  const DType *ufeat_data = get_ndarray_ptr<DType>(ufeat);
+  const DType *efeat_data = get_ndarray_ptr<DType>(efeat);
+  DType *out_data = get_ndarray_ptr<DType>(out);
+  Idx* argu_data = get_ndarray_ptr<Idx>(argu);
+  Idx* arge_data = get_ndarray_ptr<Idx>(arge);
 
   auto* thr_entry = runtime::CUDAThreadEntry::ThreadLocal();
 
@@ -319,14 +320,14 @@ void SpMMBcastCsr(
     const dgl::aten::CSRMatrix& csr,
     NDArray ufeat, NDArray efeat,
     NDArray out, NDArray argu, NDArray arge) {
-  const Idx *indptr = static_cast<Idx*>(csr.indptr->data);
-  const Idx *indices = static_cast<Idx*>(csr.indices->data);
-  const Idx *edge_map = aten::IsNullArray(csr.data)? nullptr : static_cast<Idx*>(csr.data->data);
-  const DType *ufeat_data = aten::IsNullArray(ufeat)? nullptr : static_cast<DType*>(ufeat->data);
-  const DType *efeat_data = aten::IsNullArray(efeat)? nullptr : static_cast<DType*>(efeat->data);
-  DType *out_data = static_cast<DType*>(out->data);
-  Idx* argu_data = aten::IsNullArray(argu)? nullptr : static_cast<Idx*>(argu->data);
-  Idx* arge_data = aten::IsNullArray(arge)? nullptr : static_cast<Idx*>(arge->data);
+  const Idx *indptr = get_ndarray_ptr<Idx>(csr.indptr);
+  const Idx *indices = get_ndarray_ptr<Idx>(csr.indices);
+  const Idx *edge_map = get_ndarray_ptr<Idx>(csr.data);
+  const DType *ufeat_data = get_ndarray_ptr<DType>(ufeat);
+  const DType *efeat_data = get_ndarray_ptr<DType>(efeat);
+  DType *out_data = get_ndarray_ptr<DType>(out);
+  Idx* argu_data = get_ndarray_ptr<Idx>(argu);
+  Idx* arge_data = get_ndarray_ptr<Idx>(arge);
   auto* thr_entry = runtime::CUDAThreadEntry::ThreadLocal();
 
   DLContext ctx = ufeat->ctx;
@@ -348,7 +349,6 @@ void SpMMBcastCsr(
   const int nty = 1024 / ntx;
   const int nbx = (len + ntx - 1) / ntx;
   const int nby = utils::FindNumBlocks((csr.num_rows + nty - 1) / nty, 65535);
-
   //LOG(INFO) << "nblks=(" << nbx << ", " << nby << ") nthrs=(" << ntx << ", " << nty << ")";
   const dim3 nblks(nbx, nby);
   const dim3 nthrs(ntx, nty);
