@@ -1,9 +1,12 @@
 import os
+import sys
 import time
+import glob
 import random
 import argparse
-import numpy as np
+from shutil import copy
 
+import numpy as np
 import torch
 from torch.utils.data import DataLoader
 from ogb.linkproppred import DglLinkPropPredDataset, Evaluator
@@ -33,38 +36,37 @@ def test_split(model, device, edges, train_graph, args):
         preds += [model(inputs).squeeze().cpu()]
     return preds
 
-def test(model, loss_fn, device, 
-        edge_split, train_graph, args):
-    print("\n=== start testing on pos_train_edges... ===\n")
+def test_epoch(model, loss_fn, device, 
+        evaluator, edge_split, train_graph, args):
+    print("=== start testing on pos_train_edges... ===")
     pos_train_preds = test_split(model, device, edge_split['train']['edge'], train_graph, args)
-    print("\n=== start testing on pos_valid_edges... ===\n")
+    print("=== start testing on pos_valid_edges... ===")
     pos_valid_preds = test_split(model, device, edge_split['valid']['edge'], train_graph, args)
-    print("\n=== start testing on neg_valid_edges... ===\n")
+    print("=== start testing on neg_valid_edges... ===")
     neg_valid_preds = test_split(model, device, edge_split['valid']['edge_neg'], train_graph, args)
-    print("\n=== start testing on pos_test_edges... ===\n")
+    print("=== start testing on pos_test_edges... ===")
     pos_test_preds = test_split(model, device, edge_split['test']['edge'], train_graph, args)
-    print("\n=== start testing on neg_test_edges... ===\n")
+    print("=== start testing on neg_test_edges... ===")
     neg_test_preds = test_split(model, device, edge_split['test']['edge_neg'], train_graph, args)
 
-    results = {}
-    for K in [10, 50, 100]:
-        evaluator.K = K
-        train_hits = evaluator.eval({
-            'y_pred_pos': pos_train_pred,
-            'y_pred_neg': neg_valid_pred,
-        })[f'hits@{K}']
-        valid_hits = evaluator.eval({
-            'y_pred_pos': pos_valid_pred,
-            'y_pred_neg': neg_valid_pred,
-        })[f'hits@{K}']
-        test_hits = evaluator.eval({
-            'y_pred_pos': pos_test_pred,
-            'y_pred_neg': neg_test_pred,
-        })[f'hits@{K}']
+    # results = {}
+    # for K in [10, 50, 100]:
+    K = 50
+    evaluator.K = K
+    train_hits = evaluator.eval({
+        'y_pred_pos': pos_train_pred,
+        'y_pred_neg': neg_valid_pred,
+    })[f'hits@{K}']
+    valid_hits = evaluator.eval({
+        'y_pred_pos': pos_valid_pred,
+        'y_pred_neg': neg_valid_pred,
+    })[f'hits@{K}']
+    test_hits = evaluator.eval({
+        'y_pred_pos': pos_test_pred,
+        'y_pred_neg': neg_test_pred,
+    })[f'hits@{K}']
 
-        results[f'Hits@{K}'] = (train_hits, valid_hits, test_hits)
-
-    return results
+    return (train_hits, valid_hits, test_hits)
 
 # @profile
 def train_epoch(model, loss_fn, optimizer, device, log_interval, 
@@ -124,6 +126,8 @@ def train_epoch(model, loss_fn, optimizer, device, log_interval,
     return total_loss / total_examples # len(loader.dataset)
 
 def main(args):
+    # #nodes: 235868
+    # #edges: 1179052, 60084, 100000, 46329, 100000
     raw_dataset = DglLinkPropPredDataset(name='ogbl-collab')
     train_graph = dgl.as_heterograph(raw_dataset[0])
     # there is one self_loop edge in valid_neg and test_neg separately, remove it
@@ -136,49 +140,53 @@ def main(args):
     model = IGMC(args.hop+1).to(args.device)
 
     evaluator = Evaluator(name='ogbl-collab')
-    loggers = {
-        'Hits@10': Logger(args.runs, args),
-        'Hits@50': Logger(args.runs, args),
-        'Hits@100': Logger(args.runs, args),
-    }
+    logger = MetricLogger(args.save_dir, args.runs, args)
 
-    # save_logger = MetricLogger(args.save_dir, args.valid_log_interval)
+    for run_idx in range(args.runs):
+        model.reset_parameters()
+        loss_fn = torch.nn.BCELoss().to(args.device)
+        optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
 
-    # for run_idx in range(1, args.runs+1):
-    # model.reset_parameters()
-    loss_fn = torch.nn.BCELoss().to(args.device)
-    optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
+        best_epoch = 0
+        best_hits = -np.inf
+        for epoch_idx in range(1, args.epochs+1):
+            print ('Epoch', epoch_idx)
+            # train_loss = train_epoch(model, loss_fn, optimizer, 
+            #                         args.device, args.train_log_interval, 
+            #                         edge_split['train']['edge'], train_graph, args)
+            train_loss = 1.0
 
-    for epoch_idx in range(1, args.epochs+1):
-        train_loss = train_epoch(model, loss_fn, optimizer, 
-                                args.device, args.train_log_interval, 
-                                edge_split['train']['edge'], train_graph, args)
+            test_result = test_epoch(model, loss_fn, args.device, 
+                                    evaluator, edge_split, train_graph, args)
 
-        if epoch_idx % args.eval_steps == 0:
-            results = test(model, loss_fn, args.device,
-                           edge_split, train_graph, args)
-            for key, result in results.items():
-                loggers[key].add_result(run, result)
-            
-            if epoch_idx % args.log_steps == 0:
-                for key, result in results.items():
-                    train_hits, valid_hits, test_hits = result
-                    print(key)
-                    print(f'Run: {run + 1:02d}, '
-                            f'Epoch: {epoch:02d}, '
-                            f'Loss: {loss:.4f}, '
-                            f'Train: {100 * train_hits:.2f}%, '
-                            f'Valid: {100 * valid_hits:.2f}%, '
-                            f'Test: {100 * test_hits:.2f}%')
-                print('---')
+            logger.add_result(run, test_result)
+            train_hits, valid_hits, test_hits = result
+            test_info = (f'Run: {run + 1:02d}, '
+                        f'Epoch: {epoch:02d}, '
+                        f'Loss: {train_loss:.4f}, '
+                        f'Train: {100 * train_hits:.2f}%, '
+                        f'Valid: {100 * valid_hits:.2f}%, '
+                        f'Test: {100 * test_hits:.2f}%')
+            print('=== {} ==='.format(test_info))
+            with open(os.path.join(args.save_dir, 'log.txt'), 'a') as f:
+                f.write(test_info)
 
-    for key in loggers.keys():
-        print(key)
-        loggers[key].print_statistics(run)
+            # if epoch_idx % args.train_lr_decay_step == 0:
+            #     for param in optimizer.param_groups:
+            #         param['lr'] = args.train_lr_decay_factor * param['lr']
 
-    # for key in loggers.keys():
-    #     print(key)
-    #     loggers[key].print_statistics()
+            # logger.log(test_info, model, optimizer)
+            if best_hits < test_hits:
+                best_hits = test_hits
+                best_epoch = epoch_idx
+        test_info = "Training ends. The best testing rmse is {:.6f} at epoch {}".format(best_rmse, best_epoch)
+        print(test_info)
+        with open(os.path.join(args.save_dir, 'log.txt'), 'a') as f:
+            f.write(test_info)
+
+        logger.print_statistics(run)
+
+    logger.print_statistics()
 
 def config():
     parser = argparse.ArgumentParser(description='OGBL-COLLAB')
@@ -195,17 +203,40 @@ def config():
     parser.add_argument('--runs', type=int, default=10)
 
     parser.add_argument('--seed', type=int, default=1234)
-    parser.add_argument('--hop', type=int, default=3)
+    parser.add_argument('--hop', type=int, default=2)
     parser.add_argument('--num_workers', type=int, default=16)
     parser.add_argument('--sample_ratio', type=float, default=1.0)
     parser.add_argument('--max_nodes_per_hop', type=int, default=200)
     parser.add_argument('--train_log_interval', type=int, default=100)
-    parser.add_argument('--valid_log_interval', type=int, default=10)
+    # parser.add_argument('--valid_log_interval', type=int, default=10)
+    parser.add_argument('--save_appendix', type=str, default='debug')
     args = parser.parse_args()
 
-    print(args)
     device = f'cuda:{args.device}' if torch.cuda.is_available() else 'cpu'
     args.device = torch.device(device)
+
+    ### set save_dir according to localtime and test mode
+    file_dir = os.path.dirname(os.path.realpath('__file__'))
+    local_time = time.strftime('%y%m%d%H%M', time.localtime())
+    args.save_dir = os.path.join(
+        file_dir, 'log/{}_{}'.format(
+            args.save_appendix, local_time
+        )
+    )
+    if not os.path.exists(args.save_dir):
+        os.makedirs(args.save_dir) 
+    print(args)
+
+    # backup current .py files
+    for f in glob.glob(r"*.py"):
+        copy(f, args.save_dir)
+
+    # save command line input
+    cmd_input = 'python3 ' + ' '.join(sys.argv)
+    with open(os.path.join(args.save_dir, 'cmd_input.txt'), 'a') as f:
+        f.write(cmd_input)
+        f.write("\n")
+    
     return args
 
 if __name__ == '__main__':
