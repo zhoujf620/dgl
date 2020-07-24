@@ -57,10 +57,10 @@ def thread_wrapped_func(func):
 @torch.no_grad()
 def test_split(model, device, edges, train_graph, args):
     model.eval()
-    device = th.device(device)
+    device = torch.device(device)
 
     dataset = IGMCDataset(
-        edges, train_graph, 
+        edges, train_graph, args.node_labeling_mode,
         args.hop, args.sample_ratio, args.max_nodes_per_hop)
     loader = DataLoader(dataset, batch_size=args.batch_size, shuffle=True, 
                               num_workers=args.num_workers, collate_fn=collate_igmc)
@@ -111,13 +111,13 @@ def train_epoch(proc_id, n_gpus,
     device = torch.device(device)
 
     train_dataset = IGMCDataset(
-        pos_train_edge, train_graph, 
+        pos_train_edge, train_graph, args.node_labeling_mode,
         args.hop, args.sample_ratio, args.max_nodes_per_hop)
     train_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True, 
                               num_workers=args.num_workers, collate_fn=collate_igmc)
 
     random_dataset = RandomDataset(
-        len(pos_train_edge), train_graph, 
+        len(pos_train_edge), train_graph, args.node_labeling_mode,
         args.hop, args.sample_ratio, args.max_nodes_per_hop)
     random_loader = DataLoader(random_dataset, batch_size=args.batch_size, shuffle=True, 
                               num_workers=args.num_workers, collate_fn=collate_igmc)
@@ -167,7 +167,7 @@ def train_epoch(proc_id, n_gpus,
                 iter_loss = 0.
                 iter_cnt = 0
                 iter_cur = []
-    return total_loss / total_examples # len(loader.dataset)
+    return total_loss /  len(train_loader.dataset)
 
 @thread_wrapped_func
 def main(proc_id, n_gpus, args, devices):
@@ -208,6 +208,8 @@ def main(proc_id, n_gpus, args, devices):
     # model.reset_parameters()
     # if proc_id == 0:
     for epoch_idx in range(1, args.epochs+1):
+        if n_gpus > 1:
+            torch.distributed.barrier()
         if proc_id == 0:
             print ('Epoch', epoch_idx)
         train_loss = train_epoch(proc_id, n_gpus, 
@@ -220,9 +222,9 @@ def main(proc_id, n_gpus, args, devices):
             test_result = test_epoch(model, loss_fn, dev_id, 
                                     evaluator, edge_split, train_graph, args)
             logger.add_result(run_idx, test_result)
-            train_hits, valid_hits, test_hits = result
+            train_hits, valid_hits, test_hits = test_result
             test_info = (f'Run: {run_idx + 1:02d}, '
-                        f'Epoch: {epoch:02d}, '
+                        f'Epoch: {epoch_idx:02d}, '
                         f'Loss: {train_loss:.4f}, '
                         f'Train: {100 * train_hits:.2f}%, '
                         f'Valid: {100 * valid_hits:.2f}%, '
@@ -230,16 +232,17 @@ def main(proc_id, n_gpus, args, devices):
             print('=== {} ==='.format(test_info))
             with open(os.path.join(args.save_dir, 'log.txt'), 'a') as f:
                 f.write(test_info)
+                f.write('\n')
 
-            # if epoch_idx % args.train_lr_decay_step == 0:
-            #     for param in optimizer.param_groups:
-            #         param['lr'] = args.train_lr_decay_factor * param['lr']
+            if epoch_idx % args.train_lr_decay_step == 0:
+                for param in optimizer.param_groups:
+                    param['lr'] = args.train_lr_decay_factor * param['lr']
 
             # logger.log(test_info, model, optimizer)
             if best_hits < test_hits:
                 best_hits = test_hits
                 best_epoch = epoch_idx
-    
+
     if n_gpus > 1:
         torch.distributed.barrier()
     if proc_id == 0:
@@ -247,6 +250,7 @@ def main(proc_id, n_gpus, args, devices):
         print(test_info)
         with open(os.path.join(args.save_dir, 'log.txt'), 'a') as f:
             f.write(test_info)
+            f.write('\n')
         logger.print_statistics(run_idx)
 
     # logger.print_statistics()
@@ -263,11 +267,13 @@ def config():
     # parser.add_argument('--dropout', type=float, default=0.0)
     parser.add_argument('--batch_size', type=int, default=256)
     parser.add_argument('--lr', type=float, default=1e-3)
-    parser.add_argument('--epochs', type=int, default=200)
+    parser.add_argument('--train_lr_decay_step', type=int, default=20)
+    parser.add_argument('--epochs', type=int, default=40)
     parser.add_argument('--eval_steps', type=int, default=1)
-    parser.add_argument('--runs', type=int, default=10)
+    parser.add_argument('--runs', type=int, default=3)
 
     parser.add_argument('--seed', type=int, default=1234)
+    parser.add_argument('--node_labeling_mode', type=str, default='homo')
     parser.add_argument('--hop', type=int, default=2)
     parser.add_argument('--num_workers', type=int, default=16)
     parser.add_argument('--sample_ratio', type=float, default=1.0)

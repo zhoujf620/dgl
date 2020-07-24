@@ -95,6 +95,7 @@ class MovieLens(object):
         # val_u_indices, val_v_indices, val_labels = self._generate_pair_value(valid_rating_data)
         # test_u_indices, test_v_indices, test_labels = self._generate_pair_value(test_rating_data)
 
+        # data processing functions are imported from author code
         if data_name == 'ml-100k':
             print("Using official MovieLens dataset split u1.base/u1.test with 20% validation set size...")
             (

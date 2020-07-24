@@ -4,6 +4,7 @@ import random
 import scipy.sparse as sp
 import warnings
 warnings.simplefilter('ignore', sp.SparseEfficiencyWarning)
+warnings.filterwarnings('ignore')
 
 import numpy as np
 import torch as th
@@ -98,7 +99,8 @@ def cal_dist(csr_graph, node_to_remove):
     return dists.astype(np.int64)
 
 def get_neighbor_nodes_labels(ind, graph, mode="bipartite",
-                              hop=1, sample_ratio=1.0, max_nodes_per_hop=200):
+                              hop=1, sample_ratio=1.0, max_nodes_per_hop=200,
+                              enclosing_sub_graph=False):
     
     if mode=="bipartite":
         # 1. neighbor nodes sampling
@@ -205,12 +207,20 @@ def get_neighbor_nodes_labels(ind, graph, mode="bipartite",
             v_nodes = th.cat([v_nodes, v_fringe])
             # u_dist = th.cat([u_dist, th.full((len(u_fringe), ), dist, dtype=th.int64)])
             # v_dist = th.cat([v_dist, th.full((len(v_fringe), ), dist, dtype=th.int64)])
-    
-        nodes = th.from_numpy(np.intersect1d(u_nodes.numpy(), v_nodes.numpy()))
+        
+        if enclosing_sub_graph:
+            nodes = th.from_numpy(np.intersect1d(u_nodes.numpy(), v_nodes.numpy()))
+        else:
+            nodes = th.unique(th.cat([u_nodes, v_nodes]))
+            nodes = nodes[nodes!=ind[0]]
+            nodes = nodes[nodes!=ind[1]]
+
         # concatenate ind to front, and node labels of ind can be added easily.
-        nodes = th.cat([ind, nodes])
+        nodes = th.cat([th.stack(ind), nodes])
        
         # 2. node labeling
+        if isinstance(graph, dgl.DGLHeteroGraph):
+            graph = dgl.as_immutable_graph(graph)
         csr_subgraph = graph.subgraph(nodes).adjacency_matrix_scipy(return_edge_ids=False)
         dists = th.stack([th.tensor(cal_dist(csr_subgraph, 1)), 
                           th.tensor(cal_dist(csr_subgraph, 0))], axis=1)
@@ -224,13 +234,16 @@ def get_neighbor_nodes_labels(ind, graph, mode="bipartite",
         raise NotImplementedError
     return nodes, node_labels
 
-def subgraph_extraction_labeling(ind, graph, mode="bipartite", 
+def subgraph_extraction_labeling(item, graph, mode="bipartite", 
                                  hop=1, sample_ratio=1.0, max_nodes_per_hop=200):
+    edge, year = item['edge'], item['year']
 
     # extract the h-hop enclosing subgraph nodes around link 'ind'
-    nodes, node_labels = get_neighbor_nodes_labels(ind, graph, mode, 
+    nodes, node_labels = get_neighbor_nodes_labels((edge[0], edge[1]), graph, mode, 
                                                    hop, sample_ratio, max_nodes_per_hop)
 
+    if isinstance(graph, dgl.DGLGraph):
+        graph = dgl.as_heterograph(graph)
     subgraph = graph.subgraph(nodes)
     if mode == "bipartite":
         subgraph.ndata['x'] = one_hot(node_labels, (hop+1)*2)
@@ -244,10 +257,11 @@ def subgraph_extraction_labeling(ind, graph, mode="bipartite",
     
     # set edge weight to zero as to remove links between target nodes in training process
     subgraph.edata['edge_mask'] = th.ones((subgraph.number_of_edges(), 1))
-    su = subgraph.nodes()[subgraph.ndata[dgl.NID]==ind[0]]
-    sv = subgraph.nodes()[subgraph.ndata[dgl.NID]==ind[1]]
-    _, _, target_edges = subgraph.edge_ids([su, sv], [sv, su], return_uv=True)
-    subgraph.edata['edge_mask'][target_edges] = 0
+    # su = subgraph.nodes()[subgraph.ndata[dgl.NID]==edge[0]]
+    # sv = subgraph.nodes()[subgraph.ndata[dgl.NID]==edge[1]]
+    # _, _, target_edges = subgraph.edge_ids([su, sv], [sv, su], return_uv=True)
+    time_mask = subgraph.edata['edge_year'] >= year
+    subgraph.edata['edge_mask'][time_mask] = 0
 
     return subgraph
 
@@ -267,8 +281,7 @@ if __name__ == "__main__":
 
     pos_train_edge = edge_split['train']['edge']
 
-    u, v = 89124, 44706
-    u, v = th.tensor(u), th.tensor(v)
+    u, v = th.tensor(124049), th.tensor(25199)
     subgraph = subgraph_extraction_labeling((u, v), train_graph, 'homo', 
             hop=3, sample_ratio=1.0, max_nodes_per_hop=200)
     pass

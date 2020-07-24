@@ -20,12 +20,12 @@ os.environ['TZ'] = 'Asia/Shanghai'
 time.tzset()
 
 @torch.no_grad()
-def test_split(model, device, edges, train_graph, args):
+def test_split(model, device, edges, train_graph, args, neg=False):
     model.eval()
-
+    
     dataset = IGMCDataset(
-        edges, train_graph, 
-        args.hop, args.sample_ratio, args.max_nodes_per_hop)
+        edges, train_graph, args.node_labeling_mode,
+        args.hop, args.sample_ratio, args.max_nodes_per_hop, neg)
     loader = DataLoader(dataset, batch_size=args.batch_size, shuffle=True, 
                               num_workers=args.num_workers, collate_fn=collate_igmc)
     preds = []
@@ -38,15 +38,15 @@ def test_split(model, device, edges, train_graph, args):
 def test_epoch(model, loss_fn, device, 
         evaluator, edge_split, train_graph, args):
     print("=== start testing on pos_train_edges... ===")
-    pos_train_preds = test_split(model, device, edge_split['train']['edge'], train_graph, args)
+    pos_train_preds = test_split(model, device, edge_split['train'], train_graph, args)
     print("=== start testing on pos_valid_edges... ===")
-    pos_valid_preds = test_split(model, device, edge_split['valid']['edge'], train_graph, args)
+    pos_valid_preds = test_split(model, device, edge_split['valid'], train_graph, args)
     print("=== start testing on neg_valid_edges... ===")
-    neg_valid_preds = test_split(model, device, edge_split['valid']['edge_neg'], train_graph, args)
+    neg_valid_preds = test_split(model, device, edge_split['valid'], train_graph, args, neg=True)
     print("=== start testing on pos_test_edges... ===")
-    pos_test_preds = test_split(model, device, edge_split['test']['edge'], train_graph, args)
+    pos_test_preds = test_split(model, device, edge_split['test'], train_graph, args)
     print("=== start testing on neg_test_edges... ===")
-    neg_test_preds = test_split(model, device, edge_split['test']['edge_neg'], train_graph, args)
+    neg_test_preds = test_split(model, device, edge_split['test'], train_graph, args, neg=True)
 
     # results = {}
     # for K in [10, 50, 100]:
@@ -69,17 +69,17 @@ def test_epoch(model, loss_fn, device,
 
 # @profile
 def train_epoch(model, loss_fn, optimizer, device, log_interval, 
-                pos_train_edge, train_graph, args):
+                pos_train_edge, train_graph, args, epoch_idx):
     model.train()
 
     train_dataset = IGMCDataset(
-        pos_train_edge, train_graph, 
+        pos_train_edge, train_graph, args.node_labeling_mode,
         args.hop, args.sample_ratio, args.max_nodes_per_hop)
     train_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True, 
                               num_workers=args.num_workers, collate_fn=collate_igmc)
 
     random_dataset = RandomDataset(
-        len(pos_train_edge), train_graph, 
+        len(pos_train_edge['edge']), train_graph, args.node_labeling_mode,
         args.hop, args.sample_ratio, args.max_nodes_per_hop)
     random_loader = DataLoader(random_dataset, batch_size=args.batch_size, shuffle=True, 
                               num_workers=args.num_workers, collate_fn=collate_igmc)
@@ -122,21 +122,45 @@ def train_epoch(model, loss_fn, optimizer, device, log_interval,
             iter_loss = 0.
             iter_cnt = 0
             iter_cur = []
+
+        # if iter_idx % 1000 == 0:
+        #     file_name = 'ckpt_' + str(epoch_idx) + '_' + str(iter_idx) + '.pt'
+        #     torch.save(model.state_dict(), os.path.join(args.save_dir, file_name))
+
     return total_loss / total_examples # len(loader.dataset)
 
 def main(args):
-    # #nodes: 235868
-    # #edges: 1179052, 60084, 100000, 46329, 100000
+    #nodes: 235868
+    #edges: 1179052, 60084, 100000, 46329, 100000
+    #       967632,  28072, 8,      16965, 8
     raw_dataset = DglLinkPropPredDataset(name='ogbl-collab')
-    train_graph = dgl.as_heterograph(raw_dataset[0])
-    # there is one self_loop edge in valid_neg and test_neg separately, remove it
     edge_split = raw_dataset.get_edge_split()
+    train_graph = dgl.as_heterograph(raw_dataset[0])
+
+    # remove self_loop edge in valid_neg and test_neg
     edge = edge_split['valid']['edge_neg']
     edge_split['valid']['edge_neg'] = edge[edge[:, 0]!=edge[:, 1]]
     edge = edge_split['test']['edge_neg']
     edge_split['test']['edge_neg'] = edge[edge[:, 0]!=edge[:, 1]]
+    
+    # # flatten the train graph
+    # pos_train_edges = edge_split['train']['edge']
+    # uni_edges, rev_idx = torch.unique(pos_train_edges, dim=0, return_inverse=True)
+    # src = torch.cat([uni_edges[:, 0], uni_edges[:, 1]])
+    # dst = torch.cat([uni_edges[:, 1], uni_edges[:, 0]])
+    
+    # _, _, eids = train_graph.edge_ids(pos_train_edges[:, 0], pos_train_edges[:, 1], return_uv=True)
+    # edge_weight = train_graph.edata['edge_weight'][eids]
+    # edge_weight_sum = torch.zeros((uni_edges.shape[0], 1))
+    # for eid in range(len(pos_train_edges)):
+    #     edge_weight_sum[rev_idx[eid]] += edge_weight[eid]        
+    # edge_weight_sum = torch.cat([edge_weight_sum, edge_weight_sum])
 
-    model = IGMC(args.hop+1).to(args.device)
+    # train_graph = dgl.graph((src, dst))
+    # train_graph.edata['edge_weight'] = edge_weight_sum
+
+    in_feats = args.hop+1 if args.node_labeling_mode=='homo' else (args.hop+1)*2
+    model = IGMC(in_feats).to(args.device)
 
     evaluator = Evaluator(name='ogbl-collab')
     logger = MetricLogger(args.save_dir, args.runs, args)
@@ -152,7 +176,7 @@ def main(args):
             print ('Epoch', epoch_idx)
             train_loss = train_epoch(model, loss_fn, optimizer, 
                                     args.device, args.train_log_interval, 
-                                    edge_split['train']['edge'], train_graph, args)
+                                    edge_split['train'], train_graph, args, epoch_idx)
             test_result = test_epoch(model, loss_fn, args.device, 
                                     evaluator, edge_split, train_graph, args)
 
@@ -167,6 +191,7 @@ def main(args):
             print('=== {} ==='.format(test_info))
             with open(os.path.join(args.save_dir, 'log.txt'), 'a') as f:
                 f.write(test_info)
+                f.write('\n')
 
             # if epoch_idx % args.train_lr_decay_step == 0:
             #     for param in optimizer.param_groups:
@@ -180,6 +205,7 @@ def main(args):
         print(test_info)
         with open(os.path.join(args.save_dir, 'log.txt'), 'a') as f:
             f.write(test_info)
+            f.write('\n')
         logger.print_statistics(run_idx)
 
     logger.print_statistics()
@@ -199,6 +225,7 @@ def config():
     parser.add_argument('--runs', type=int, default=10)
 
     parser.add_argument('--seed', type=int, default=1234)
+    parser.add_argument('--node_labeling_mode', type=str, default='homo')
     parser.add_argument('--hop', type=int, default=2)
     parser.add_argument('--num_workers', type=int, default=16)
     parser.add_argument('--sample_ratio', type=float, default=1.0)

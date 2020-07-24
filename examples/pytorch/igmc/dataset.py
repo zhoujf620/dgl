@@ -26,7 +26,7 @@ class MovieLensDataset(th.utils.data.Dataset):
         g_label = self.g_labels[idx]
 
         subgraph = subgraph_extraction_labeling(
-            (u, v), self.graph, 
+            (u, v), self.graph, 'bipartite',
             hop=self.hop, sample_ratio=self.sample_ratio, max_nodes_per_hop=self.max_nodes_per_hop)
 
         return subgraph, g_label

@@ -59,7 +59,7 @@ def cal_dist(csr_graph, node_to_remove):
     return dists.astype(np.int64)
 
 def get_neighbor_nodes_labels(ind, graph, mode="bipartite",
-        hop=1, sample_ratio=1.0, max_nodes_per_hop=200):
+                              hop=1, sample_ratio=1.0, max_nodes_per_hop=200):
     
     if mode=="bipartite":
         # 1. neighbor nodes sampling
@@ -107,13 +107,13 @@ def get_neighbor_nodes_labels(ind, graph, mode="bipartite",
         # 1. neighbor nodes sampling
         dist = 0
         nodes = th.stack(ind)
-        dists = nodes.zeros_like(nodes) 
+        dists = th.zeros_like(nodes) 
         visited = th.unique(nodes)
         fringe = th.unique(nodes)
 
         for dist in range(1, hop+1):
             fringe = graph.in_edges(fringe)[0]    
-            fringe = th.from_numpy(np.setdiffed(fringe.numpy(), visited.numpy()))
+            fringe = th.from_numpy(np.setdiff1d(fringe.numpy(), visited.numpy()))
             visited = th.unique(th.cat([visited, fringe]))
 
             if sample_ratio < 1.0:
@@ -169,9 +169,11 @@ def get_neighbor_nodes_labels(ind, graph, mode="bipartite",
     
         nodes = th.from_numpy(np.intersect1d(u_nodes.numpy(), v_nodes.numpy()))
         # concatenate ind to front, and node labels of ind can be added easily.
-        nodes = th.cat([ind, nodes])
+        nodes = th.cat([th.stack(ind), nodes])
        
         # 2. node labeling
+        if isinstance(graph, dgl.DGLHeteroGraph):
+            graph = dgl.as_immutable_graph(graph)
         csr_subgraph = graph.subgraph(nodes).adjacency_matrix_scipy(return_edge_ids=False)
         dists = th.stack([th.tensor(cal_dist(csr_subgraph, 1)), 
                           th.tensor(cal_dist(csr_subgraph, 0))], axis=1)
@@ -192,6 +194,8 @@ def subgraph_extraction_labeling(ind, graph, mode="bipartite",
     nodes, node_labels = get_neighbor_nodes_labels(ind, graph, mode, 
                                                    hop, sample_ratio, max_nodes_per_hop)
 
+    if isinstance(graph, dgl.DGLGraph):
+        graph = dgl.as_heterograph(graph)
     subgraph = graph.subgraph(nodes)
     if mode == "bipartite":
         subgraph.ndata['x'] = one_hot(node_labels, (hop+1)*2)
