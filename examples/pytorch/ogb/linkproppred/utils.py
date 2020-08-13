@@ -84,6 +84,11 @@ def torch_net_info(net, save_path=None):
             f.write(info_str)
     return info_str
 
+def MinMaxScaling(x, axis=0):
+    dist = x.max(axis=axis) - x.min(axis=axis)
+    x = (x - x.min(axis=axis)) / (dist + 1e-7)
+    return x
+
 def one_hot(idx, length):
     x = th.zeros([len(idx), length])
     x[th.arange(len(idx)), idx] = 1.0
@@ -234,34 +239,37 @@ def get_neighbor_nodes_labels(ind, graph, mode="bipartite",
         raise NotImplementedError
     return nodes, node_labels
 
-def subgraph_extraction_labeling(item, graph, mode="bipartite", 
+def subgraph_extraction_labeling(ind, graph, mode="bipartite", 
                                  hop=1, sample_ratio=1.0, max_nodes_per_hop=200):
-    edge, year = item['edge'], item['year']
+    # edge, year = item['edge'], item['year']
 
     # extract the h-hop enclosing subgraph nodes around link 'ind'
-    nodes, node_labels = get_neighbor_nodes_labels((edge[0], edge[1]), graph, mode, 
+    nodes, node_labels = get_neighbor_nodes_labels((ind[0], ind[1]), graph, mode, 
                                                    hop, sample_ratio, max_nodes_per_hop)
 
     if isinstance(graph, dgl.DGLGraph):
         graph = dgl.as_heterograph(graph)
     subgraph = graph.subgraph(nodes)
     if mode == "bipartite":
-        subgraph.ndata['x'] = one_hot(node_labels, (hop+1)*2)
+        subgraph.ndata['nlabel'] = one_hot(node_labels, (hop+1)*2)
     elif mode == "homo":
-        subgraph.ndata['x'] = one_hot(node_labels, hop+1)
+        subgraph.ndata['nlabel'] = one_hot(node_labels, hop+1)
     elif mode == "grail":
-        subgraph.ndata['x'] = th.cat([one_hot(node_labels[:, 0], hop+1), 
+        subgraph.ndata['nlabel'] = th.cat([one_hot(node_labels[:, 0], hop+1), 
                                       one_hot(node_labels[:, 1], hop+1)], dim=1)
     else:
         raise NotImplementedError
     
+    # subgraph.ndata['x'] = th.cat([subgraph.ndata['nlabel'], subgraph.ndata['refex']], dim=1)
+    subgraph.ndata['x'] = subgraph.ndata['nlabel']
+    
     # set edge weight to zero as to remove links between target nodes in training process
     subgraph.edata['edge_mask'] = th.ones((subgraph.number_of_edges(), 1))
-    # su = subgraph.nodes()[subgraph.ndata[dgl.NID]==edge[0]]
-    # sv = subgraph.nodes()[subgraph.ndata[dgl.NID]==edge[1]]
-    # _, _, target_edges = subgraph.edge_ids([su, sv], [sv, su], return_uv=True)
-    time_mask = subgraph.edata['edge_year'] >= year
-    subgraph.edata['edge_mask'][time_mask] = 0
+    su = subgraph.nodes()[subgraph.ndata[dgl.NID]==ind[0]]
+    sv = subgraph.nodes()[subgraph.ndata[dgl.NID]==ind[1]]
+    _, _, target_edges = subgraph.edge_ids([su, sv], [sv, su], return_uv=True)
+    # time_mask = subgraph.edata['edge_year'] >= year
+    subgraph.edata['edge_mask'][target_edges] = 0
 
     return subgraph
 

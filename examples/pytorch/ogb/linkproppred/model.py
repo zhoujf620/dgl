@@ -46,8 +46,7 @@ class SAGEConv_Custom(nn.Module):
 
             if self._aggre_type == 'mean':
                 graph.srcdata['h'] = feat_src
-                # edge_mask will affect mean result
-                graph.update_all(self.message_func, fn.sum('msg', 'neigh'))
+                graph.update_all(self.message_func, fn.mean('msg', 'neigh'))
                 # graph.update_all(fn.copy_src('h', 'm'), fn.mean('m', 'neigh'))
                 h_neigh = graph.dstdata['neigh']
             else:
@@ -60,7 +59,7 @@ class IGMC(nn.Module):
     def __init__(self, in_feats, gconv=SAGEConv_Custom, latent_dim=[32, 32, 32, 32], 
                 regression=False, edge_dropout=0.2, 
                 force_undirected=False, side_features=False, n_side_features=0, 
-                multiply_by=1):
+                hidden_dim=128, num_layers=2, multiply_by=1):
         super(IGMC, self).__init__()
 
         self.regression = regression
@@ -78,19 +77,24 @@ class IGMC(nn.Module):
                                     aggregator_type='mean', feat_drop=0., bias=True, 
                                     norm=None, activation=None))
         
-        self.lin1 = nn.Linear(2 * sum(latent_dim), 128, bias=True)
-        # if side_features:
-        #     self.lin1 = nn.Linear(2 * sum(latent_dim) + n_side_features, 128)
-        self.lin2 = nn.Linear(128, 1, bias=True)
+        self.lins = th.nn.ModuleList()
+        lin1 = nn.Linear(2 * sum(latent_dim), hidden_dim, bias=True)
+        if side_features:
+            lin1 = nn.Linear(2 * (sum(latent_dim) + n_side_features), hidden_dim, bias=True)
+        self.lins.append(lin1)
+        for _ in range(num_layers-2):
+            self.lins.append(nn.Linear(hidden_dim, hidden_dim, bias=True))
+        self.lins.append(nn.Linear(hidden_dim, 1, bias=True))
+        
         self.reset_parameters()
 
     def reset_parameters(self):
         for conv in self.convs:
             conv.reset_parameters()
-            # print (conv.weight.abs().mean(), conv.bias.abs().mean())
-        self.lin1.reset_parameters()
-        self.lin2.reset_parameters()
+        for lin in self.lins:
+            lin.reset_parameters()
 
+    # @profile
     def forward(self, block):
         # block = edge_drop(block, self.edge_dropout, self.training)
 
@@ -103,15 +107,16 @@ class IGMC(nn.Module):
             concat_states.append(x)
         concat_states = th.cat(concat_states, 1)    
 
-        query = block.ndata['x'][:, 0] == 1
+        query = block.ndata['nlabel'][:, 0] == 1
         query_feat = concat_states[query].reshape([-1, 2, concat_states.shape[-1]])
         x = th.cat([query_feat[:, 0, :], query_feat[:, 1, :]], 1)
         # if self.side_features:
         #     x = th.cat([x, data.u_feature, data.v_feature], 1)
 
-        x = F.relu(self.lin1(x))
-        x = F.dropout(x, p=0.5, training=self.training)
-        x = self.lin2(x)
+        for lin in self.lins[:-1]:
+            x = F.relu(lin(x))
+            x = F.dropout(x, p=0.5, training=self.training)
+        x = self.lins[-1](x)
         return th.sigmoid(x)
 
     def __repr__(self):

@@ -14,18 +14,18 @@ import dgl
 
 from dataset import IGMCDataset, RandomDataset, collate_igmc
 from model import IGMC
-from utils import MetricLogger
+from utils import MetricLogger, MinMaxScaling
 
 os.environ['TZ'] = 'Asia/Shanghai'
 time.tzset()
 
 @torch.no_grad()
-def test_split(model, device, edges, train_graph, args, neg=False):
+def test_split(model, device, edges, train_graph, args):
     model.eval()
     
     dataset = IGMCDataset(
         edges, train_graph, args.node_labeling_mode,
-        args.hop, args.sample_ratio, args.max_nodes_per_hop, neg)
+        args.hop, args.sample_ratio, args.max_nodes_per_hop)
     loader = DataLoader(dataset, batch_size=args.batch_size, shuffle=True, 
                               num_workers=args.num_workers, collate_fn=collate_igmc)
     preds = []
@@ -38,15 +38,15 @@ def test_split(model, device, edges, train_graph, args, neg=False):
 def test_epoch(model, loss_fn, device, 
         evaluator, edge_split, train_graph, args):
     print("=== start testing on pos_train_edges... ===")
-    pos_train_preds = test_split(model, device, edge_split['train'], train_graph, args)
+    pos_train_preds = test_split(model, device, edge_split['train']['edge'], train_graph, args)
     print("=== start testing on pos_valid_edges... ===")
-    pos_valid_preds = test_split(model, device, edge_split['valid'], train_graph, args)
+    pos_valid_preds = test_split(model, device, edge_split['valid']['edge'], train_graph, args)
     print("=== start testing on neg_valid_edges... ===")
-    neg_valid_preds = test_split(model, device, edge_split['valid'], train_graph, args, neg=True)
+    neg_valid_preds = test_split(model, device, edge_split['valid']['edge_neg'], train_graph, args)
     print("=== start testing on pos_test_edges... ===")
-    pos_test_preds = test_split(model, device, edge_split['test'], train_graph, args)
+    pos_test_preds = test_split(model, device, edge_split['test']['edge'], train_graph, args)
     print("=== start testing on neg_test_edges... ===")
-    neg_test_preds = test_split(model, device, edge_split['test'], train_graph, args, neg=True)
+    neg_test_preds = test_split(model, device, edge_split['test']['edge_neg'], train_graph, args)
 
     # results = {}
     # for K in [10, 50, 100]:
@@ -79,7 +79,7 @@ def train_epoch(model, loss_fn, optimizer, device, log_interval,
                               num_workers=args.num_workers, collate_fn=collate_igmc)
 
     random_dataset = RandomDataset(
-        len(pos_train_edge['edge']), train_graph, args.node_labeling_mode,
+        len(pos_train_edge), train_graph, args.node_labeling_mode,
         args.hop, args.sample_ratio, args.max_nodes_per_hop)
     random_loader = DataLoader(random_dataset, batch_size=args.batch_size, shuffle=True, 
                               num_workers=args.num_workers, collate_fn=collate_igmc)
@@ -133,9 +133,21 @@ def main(args):
     #nodes: 235868
     #edges: 1179052, 60084, 100000, 46329, 100000
     #       967632,  28072, 8,      16965, 8
-    raw_dataset = DglLinkPropPredDataset(name='ogbl-collab')
+    data_name = 'ogbl-collab'
+    raw_dataset = DglLinkPropPredDataset(name=data_name)
     edge_split = raw_dataset.get_edge_split()
     train_graph = dgl.as_heterograph(raw_dataset[0])
+
+    # # add refex feature
+    # refex_feature = torch.load("./refex_feature.pt")
+    # print("refex feature shape: {}".format(refex_feature.numpy().shape))
+    # train_graph.ndata['refex'] = refex_feature
+
+    # # add gdv feature
+    # gdv_feature = np.loadtxt('./{}.gdv'.format(data_name), dtype=np.float32)
+    # print("gdv feature shape: {}".format(gdv_feature.shape))
+    # gdv_feature = MinMaxScaling(gdv_feature, axis=0)
+    # train_graph.ndata['gdv'] = torch.from_numpy(gdv_feature)
 
     # remove self_loop edge in valid_neg and test_neg
     edge = edge_split['valid']['edge_neg']
@@ -160,6 +172,7 @@ def main(args):
     # train_graph.edata['edge_weight'] = edge_weight_sum
 
     in_feats = args.hop+1 if args.node_labeling_mode=='homo' else (args.hop+1)*2
+    # in_feats = train_graph.ndata['refex'].shape[1]
     model = IGMC(in_feats).to(args.device)
 
     evaluator = Evaluator(name='ogbl-collab')
@@ -176,7 +189,7 @@ def main(args):
             print ('Epoch', epoch_idx)
             train_loss = train_epoch(model, loss_fn, optimizer, 
                                     args.device, args.train_log_interval, 
-                                    edge_split['train'], train_graph, args, epoch_idx)
+                                    edge_split['train']['edge'], train_graph, args, epoch_idx)
             test_result = test_epoch(model, loss_fn, args.device, 
                                     evaluator, edge_split, train_graph, args)
 

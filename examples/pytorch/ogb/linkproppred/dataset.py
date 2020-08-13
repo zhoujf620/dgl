@@ -18,21 +18,23 @@ class IGMCDataset(torch.utils.data.Dataset):
         self.sample_ratio = sample_ratio
         self.max_nodes_per_hop = max_nodes_per_hop
     
-        self.neg = neg
+        # self.neg = neg
     def __len__(self):
-        if not self.neg:
-            return len(self.links['edge'])
-        else:
-            return len(self.links['edge_neg'])
+        # if not self.neg:
+        #     return len(self.links['edge'])
+        # else:
+        #     return len(self.links['edge_neg'])
+        return len(self.links)
 
     def __getitem__(self, idx):
-        if not self.neg:
-            item = {'edge': self.links['edge'][idx], 'year': self.links['year'][idx]}
-        else:
-            item = {'edge': self.links['edge_neg'][idx], 'year': 2020}
+        # if not self.neg:
+        #     item = {'edge': self.links['edge'][idx], 'year': self.links['year'][idx]}
+        # else:
+        #     item = {'edge': self.links['edge_neg'][idx], 'year': 2020}
+        u, v = self.links[idx][0], self.links[idx][1]
 
         subgraph = subgraph_extraction_labeling(
-            item, self.graph, self.node_labeling_mode, 
+            (u, v), self.graph, self.node_labeling_mode, 
             self.hop, self.sample_ratio, self.max_nodes_per_hop)
         return subgraph
 
@@ -53,18 +55,18 @@ class RandomDataset(torch.utils.data.Dataset):
     
     def __getitem__(self, idx):
         # random sample two different nodes
-        edge = torch.randint(0, self.num_nodes, (2, ))
-        while (edge[0] == edge[1]):
-            edge = torch.randint(0, self.num_nodes, (2, ))
+        ind = torch.randint(0, self.num_nodes, (2, ))
+        while (ind[0]==ind[1]):
+            ind = torch.randint(0, self.num_nodes, (2, ))
 
-        item = {'edge': edge, 'year': 2020} # random edge year will not affect time_mask
+        # item = {'edge': edge, 'year': 2020} # random edge year will not affect time_mask
         subgraph = subgraph_extraction_labeling(
-            item, self.graph, self.node_labeling_mode, 
+            (ind[0], ind[1]), self.graph, self.node_labeling_mode, 
             self.hop, self.sample_ratio, self.max_nodes_per_hop)
         return subgraph    
 
 def collate_igmc(g_list):    
-    g = dgl.batch_hetero(g_list)
+    g = dgl.batch(g_list)
     return g
 
 if __name__ == "__main__":
@@ -107,26 +109,28 @@ if __name__ == "__main__":
         edge_split['valid'], train_graph, 'homo',
         hop=3, sample_ratio=1.0, max_nodes_per_hop=200, neg=True)
     loader = torch.utils.data.DataLoader(dataset, batch_size=256, shuffle=False, 
-                                        num_workers=0, collate_fn=collate_igmc)
+                                        num_workers=16, collate_fn=collate_igmc)
     # batch = next(iter(train_loader))
 
     random_dataset = RandomDataset(
         len(edge_split['train']['edge']), train_graph, 
        hop=3, sample_ratio=1.0, max_nodes_per_hop=200)
     random_loader = torch.utils.data.DataLoader(random_dataset, batch_size=256, shuffle=True, 
-                              num_workers=0, collate_fn=collate_igmc)
+                              num_workers=16, collate_fn=collate_igmc)
     neg_iter = iter(random_loader)
     # batch = next(iter(random_loader))
 
-    iter_dur = []
-    for iter_idx, batch in enumerate(loader, start=1):
-        t_start = time.time()
+    # iter_dur = []
+    t_start = time.time()
+    for iter_idx, batch in enumerate(loader, start=1): # 1.6min
 
         inputs = batch #.to(device)
         inputs = next(neg_iter) # .to(device)
 
-        iter_dur.append(time.time() - t_start)
-        if iter_idx % 100 == 0:
-            print("Iter={}, time={:.4f}".format(
-                iter_idx, np.average(iter_dur)))
-            iter_cur = []
+        # iter_dur.append(time.time() - t_start)
+        # if iter_idx % 100 == 0:
+        #     print("Iter={}, time={:.4f}".format(
+        #         iter_idx, np.average(iter_dur)))
+        #     iter_dur = []
+
+    print("time={:.2}".format((time.time() - t_start)/60))
